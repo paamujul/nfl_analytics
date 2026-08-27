@@ -238,9 +238,25 @@ def sync_snap_counts(season: int) -> int:
 
 
 def backfill_season(season: int) -> dict[str, int]:
-    """Full nflverse backfill for one season."""
-    out = {"teams": sync_teams(), "schedules": sync_schedules(season)}
-    out["player_stats"] = sync_players_and_stats(season)
-    out["plays"] = sync_pbp(season)
-    out["snap_counts"] = sync_snap_counts(season)
+    """Full nflverse backfill for one season.
+
+    Each dataset is independent: early in a season nflverse publishes some
+    files before others (and none before week 1), so one missing release
+    must not abort the rest.
+    """
+    steps = {
+        "teams": sync_teams,
+        "schedules": lambda: sync_schedules(season),
+        "player_stats": lambda: sync_players_and_stats(season),
+        "plays": lambda: sync_pbp(season),
+        "snap_counts": lambda: sync_snap_counts(season),
+    }
+    out: dict[str, int] = {}
+    for name, fn in steps.items():
+        try:
+            out[name] = fn()
+        except Exception as e:
+            out[name] = 0
+            with db_session() as s:
+                _log(s, f"{name} {season}", "error", message=str(e)[:300])
     return out

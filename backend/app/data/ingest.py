@@ -10,12 +10,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
-from app.config import POLL_GAMEDAY, POLL_IDLE, POLL_LIVE
+from app.config import (
+    NFLVERSE_NIGHTLY, NFLVERSE_REFRESH_SECONDS, POLL_GAMEDAY, POLL_IDLE, POLL_LIVE,
+)
 from app.data import espn_source as espn
+from app.data.seed import start_nflverse_refresh
 from app.db.models import Game, Play, Player, PlayerGameStat, SyncLog
 from app.db.session import db_session
 from app.data.nflverse_source import _upsert_all  # shared sqlite upsert helper
@@ -98,6 +102,7 @@ class LiveIngester:
     def __init__(self):
         self._stop = asyncio.Event()
         self.task: asyncio.Task | None = None
+        self._last_nflverse: float | None = None
 
     def start(self) -> None:
         self.task = asyncio.create_task(self.run(), name="live-ingester")
@@ -133,6 +138,7 @@ class LiveIngester:
         if games:
             with db_session() as s:
                 _upsert_all(s, Game, games)
+        self._maybe_refresh_nflverse(games)
 
         live = [g for g in games if g["status"] == "in"]
         # refresh live games, and finals that we haven't stored plays for yet
@@ -155,6 +161,23 @@ class LiveIngester:
         upcoming = [g for g in games if g["status"] == "scheduled"
                     and g.get("kickoff") and g["kickoff"] <= soon.isoformat()]
         return POLL_GAMEDAY if upcoming else POLL_IDLE
+
+    def _maybe_refresh_nflverse(self, games: list[dict]) -> None:
+        """Once a day during the regular/post season, pull fresh nflverse data.
+
+        ESPN gives scores and play text live; nflverse adds EPA, success and
+        participation a day or so later. Preseason isn't covered by nflverse,
+        so only trigger this once real games are being played.
+        """
+        if not NFLVERSE_NIGHTLY or not games:
+            return
+        if not any(g["phase"] in ("reg", "post") for g in games):
+            return
+        now = time.monotonic()
+        if self._last_nflverse and now - self._last_nflverse < NFLVERSE_REFRESH_SECONDS:
+            return
+        self._last_nflverse = now
+        start_nflverse_refresh(games[0]["season"])
 
     @staticmethod
     async def _default_scoreboard(client: espn.EspnClient) -> dict:

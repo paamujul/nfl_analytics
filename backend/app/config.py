@@ -1,8 +1,9 @@
 """Central configuration for the NFL analytics backend."""
+import os
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-STORAGE_DIR = BACKEND_DIR / "storage"
+STORAGE_DIR = Path(os.environ.get("STORAGE_DIR", BACKEND_DIR / "storage"))
 CACHE_DIR = STORAGE_DIR / "cache"
 DB_PATH = STORAGE_DIR / "nfl.db"
 
@@ -41,3 +42,16 @@ POLL_IDLE = 60 * 60     # off day
 
 # Minimum plays on/off the field for a lineup-impact split to be reported
 LINEUP_MIN_PLAYS = 20
+
+# Extra browser origins allowed to call the API (comma-separated), e.g. the
+# deployed frontend domain. Localhost dev origins are always allowed.
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
+# On first boot with an empty database, seed it in the background so a fresh
+# deploy becomes useful without any manual backfill step.
+AUTO_SEED = os.environ.get("AUTO_SEED", "1") != "0"
+SEED_SEASONS = (2025, 2026)
+
+# Refresh nflverse data for the live season once a day (EPA, participation).
+NFLVERSE_NIGHTLY = os.environ.get("NFLVERSE_NIGHTLY", "1") != "0"
+NFLVERSE_REFRESH_SECONDS = 24 * 60 * 60

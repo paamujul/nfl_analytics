@@ -104,7 +104,12 @@ export interface LiveGame {
   kickoff: string | null;
 }
 
-async function get<T>(url: string): Promise<T> {
+// In production the API lives on a separate host (Railway); set VITE_API_BASE
+// to that origin. Empty default keeps dev on the Vite proxy (same origin).
+const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '');
+
+async function get<T>(path: string): Promise<T> {
+  const url = `${API_BASE}${path}`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${r.status} ${r.statusText} — ${url}`);
   return r.json();
