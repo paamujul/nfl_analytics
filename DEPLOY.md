@@ -10,6 +10,17 @@ GitHub Pages and Vercel *alone* can't host this: they serve static files and
 short-lived serverless functions, neither of which can run a continuous poller or
 keep a SQLite file between requests.
 
+## Pick a path
+
+| | Cost | Effort | Guide |
+|---|---|---|---|
+| **Oracle Cloud Always Free VM** + Caddy | Free, indefinitely | ~30 min, self-managed box | [DEPLOY_ORACLE.md](DEPLOY_ORACLE.md) |
+| **Railway** + Vercel | ~$5/month | ~10 min, fully managed | this file |
+
+Free container tiers (Render, Koyeb, Fly) don't work here: they sleep when idle,
+can't attach a persistent disk on the free plan, and their 512 MB instances are
+too small for the nflverse seed.
+
 ---
 
 ## 1. Backend on Railway

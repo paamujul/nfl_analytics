@@ -1,0 +1,60 @@
+# Caddy config for the NFL Analytics box. Install to /etc/caddy/Caddyfile.
+#
+# Replace nfl.example.com with your domain. No domain? Use sslip.io, which
+# resolves any <ip>.sslip.io to that IP and works with Let's Encrypt:
+#   198-51-100-7.sslip.io
+#
+# Caddy obtains and renews TLS certificates automatically — nothing to do.
+
+nfl.example.com {
+	encode zstd gzip
+
+	# API -> the uvicorn process bound to localhost.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8600 {
+			# The seed/backfill endpoints can be slow on first boot.
+			transport http {
+				response_header_timeout 120s
+			}
+		}
+	}
+
+	# FastAPI's interactive docs (optional — delete to keep them private).
+	handle /docs* {
+		reverse_proxy 127.0.0.1:8600
+	}
+	handle /openapi.json {
+		reverse_proxy 127.0.0.1:8600
+	}
+
+	# Everything else: the built React SPA. try_files sends unknown paths to
+	# index.html so deep links like /team/KC and /player/00-0036900 work.
+	handle {
+		root * /var/www/nfl-analytics
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Long-cache the fingerprinted build assets; never cache the shell.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@html path /index.html
+	header @html Cache-Control "no-cache"
+
+	log {
+		output file /var/log/caddy/nfl-analytics.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+# ALTERNATIVE: keep the frontend on Vercel and serve only the API from this box.
+# Use this block *instead of* the one above if you prefer that split, then set
+# ALLOWED_ORIGINS=https://your-app.vercel.app in /etc/nfl-analytics.env.
+# ---------------------------------------------------------------------------
+# api.example.com {
+# 	encode zstd gzip
+# 	reverse_proxy 127.0.0.1:8600
+# }

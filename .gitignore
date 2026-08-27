@@ -22,3 +22,5 @@ frontend/dist/
 
 # Env
 .env
+backend/storage/*.db-wal
+backend/storage/*.db-shm

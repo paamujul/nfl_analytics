@@ -1,0 +1,42 @@
+# NFL Analytics API + live ingester.
+# Install to /etc/systemd/system/nfl-analytics.service
+[Unit]
+Description=NFL Analytics API (FastAPI + live ESPN ingester)
+Documentation=https://github.com/paamujul/nfl_analytics
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=nflapp
+Group=nflapp
+WorkingDirectory=/opt/nfl-analytics/backend
+EnvironmentFile=/etc/nfl-analytics.env
+ExecStart=/opt/nfl-analytics/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8600
+
+# Always come back: crashes, OOM kills, and reboots alike.
+Restart=always
+RestartSec=5
+# uvicorn shuts down on SIGTERM; the lifespan handler stops the ingester cleanly.
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nfl-analytics
+
+# --- hardening ---------------------------------------------------------
+# The whole filesystem is read-only except the data directory below.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/nfl-analytics
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
