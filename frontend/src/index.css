@@ -236,4 +236,8 @@ h2.section small { color: var(--muted); font-weight: 400; margin-left: 8px; }
 @media (max-width: 720px) {
   .duel-row { grid-template-columns: 64px 1fr 110px 1fr 64px; }
   .pct-row { grid-template-columns: 130px 1fr 70px; }
+  .vs-head { grid-template-columns: 1fr; }
+  .vs-head .vs-x { display: none; }
+  .vs-team.right { flex-direction: row; }
+  .vs-team select { max-width: 100%; }
 }
