@@ -31,9 +31,20 @@ records yourself; the setup script does the rest on the box.
    > **Do not pick the AMD `VM.Standard.E2.1.Micro`.** It has 1 GB of RAM and the
    > first-boot nflverse seed will be OOM-killed part way through.
 
-5. **SSH keys:** upload your public key (`~/.ssh/id_ed25519.pub`) or let Oracle
+5. **Boot volume:** leave it at the default **50 GB**.
+
+   > The cost estimator on this screen will quote about **$2.00/month** for the
+   > boot volume. Ignore it — it prices at list rate and says so in the fine
+   > print (*"does not reflect any tier unit pricing"*). Always Free includes
+   > 200 GB of block storage, which boot volumes draw from, so a 50 GB disk is
+   > $0. Just don't size it up, and check that the shape shows the **Always Free
+   > eligible** badge — that badge, not the estimate, decides what you pay.
+   > (50 GB is ample: Ubuntu + venv + the parquet cache and database stay under
+   > 10 GB.)
+
+6. **SSH keys:** upload your public key (`~/.ssh/id_ed25519.pub`) or let Oracle
    generate one and save the private key.
-6. Keep the default VCN with a public IPv4 address. Create the instance and note
+7. Keep the default VCN with a public IPv4 address. Create the instance and note
    the **public IP**.
 
 <details>
