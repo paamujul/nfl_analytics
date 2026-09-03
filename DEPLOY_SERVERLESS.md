@@ -26,8 +26,17 @@ replaced freely.
 | Database | Supabase Postgres | $0 |
 | Monitoring | UptimeRobot | $0 |
 
-For the always-on alternatives see [DEPLOY_ORACLE.md](DEPLOY_ORACLE.md) (free VM,
-full 45s live polling) and [DEPLOY.md](DEPLOY.md) (~$5/mo managed).
+## This deployment
+
+| | |
+|---|---|
+| API | `https://nfl-analytics-api-299027847230.us-east1.run.app` |
+| GCP project / region | `project-e7b849a1-fc6a-41d7-879` / `us-east1` |
+| Database | Supabase `dnwdasegtdejtjgexmku`, AWS `us-east-2` |
+| Image | `us-east1-docker.pkg.dev/project-e7b849a1-fc6a-41d7-879/nfl-analytics/api` |
+
+Measured cold start is ~0.8s, so there is no reason to pay for `min-instances`.
+Build for `linux/amd64` explicitly if you are on an Apple Silicon Mac.
 
 ---
 
@@ -36,13 +45,17 @@ full 45s live polling) and [DEPLOY.md](DEPLOY.md) (~$5/mo managed).
 Create a free project. Two connection strings matter and they are **not**
 interchangeable:
 
-| Use | Connection | Port |
+| Use | Connection | Host / port |
 |---|---|---|
-| Alembic migrations, `psql` | Direct / session | 5432 |
-| Cloud Run service and jobs | **Transaction pooler** | 6543 |
+| Alembic migrations, `psql` | **Session pooler** | `*.pooler.supabase.com:5432` |
+| Cloud Run service and jobs | **Transaction pooler** | `*.pooler.supabase.com:6543` |
 
-Transaction-mode pooling can't run DDL and can't hold server-side prepared
-statements. The app already disables those (`prepare_threshold=None` in
+Use the *pooler* host for both, not `db.<ref>.supabase.co`. Supabase's direct
+endpoint is IPv6-only and does not resolve from most networks — the session
+pooler on 5432 is its IPv4 substitute and runs DDL fine.
+
+Transaction-mode pooling (6543) can't run DDL and can't hold server-side
+prepared statements. The app already disables those (`prepare_threshold=None` in
 [backend/app/db/session.py](backend/app/db/session.py)) — without it you get
 intermittent `prepared statement already exists` errors once a query has run
 five times.
@@ -57,14 +70,14 @@ The free tier pauses only after **7 days of zero activity**, which the
 ## 2. Create the schema and seed
 
 ```bash
-DATABASE_URL='<direct 5432 url>' alembic upgrade head
+DATABASE_URL='<session pooler 5432 url>' alembic upgrade head
 ```
 
 Then seed once. The data is fully reproducible from nflverse and ESPN, so there
 is nothing to migrate out of the old SQLite file:
 
 ```bash
-DATABASE_URL='<direct 5432 url>' python -m app.cli seed
+DATABASE_URL='<session pooler 5432 url>' python -m app.cli seed
 ```
 
 Takes several minutes (~50k plays, several hundred MB of parquet). Needs ~2 GB of
