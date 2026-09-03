@@ -1,38 +1,9 @@
 """Upsert semantics: re-ingesting the same game must change nothing."""
-import json
-from pathlib import Path
+from sqlalchemy import func, select
 
-import pytest
-from sqlalchemy import create_engine, func, select
-from sqlalchemy.orm import sessionmaker
-
-from app.data import espn_source as es
-from app.data.nflverse_source import _upsert_all
-from app.db.models import Base, Game, Play, Player, PlayerGameStat
-
-FIXTURE = Path(__file__).parent / "fixtures" / "espn_summary_401873286.json"
-
-
-@pytest.fixture()
-def session():
-    engine = create_engine("sqlite://")  # in-memory
-    Base.metadata.create_all(engine)
-    s = sessionmaker(bind=engine)()
-    yield s
-    s.close()
-
-
-def _ingest(session):
-    summary = json.loads(FIXTURE.read_text())
-    game = es.normalize_summary_header(summary)
-    players, stats = es.normalize_boxscore(summary, game["id"])
-    plays = es.normalize_plays(summary, game["id"], players,
-                               game["home_team"], game["away_team"])
-    _upsert_all(session, Game, [game])
-    _upsert_all(session, Player, players)
-    _upsert_all(session, PlayerGameStat, stats)
-    _upsert_all(session, Play, plays)
-    session.commit()
+from app.db.models import Game, Play, Player, PlayerGameStat
+from app.db.upsert import upsert_all
+from tests.conftest import load_fixture_game as _ingest
 
 
 def _counts(session):
@@ -55,7 +26,7 @@ def test_double_ingest_is_idempotent(session):
 
 def test_heterogeneous_rows_keep_all_columns(session):
     """Rows with different key sets must not lose columns (kickoff-first bug)."""
-    _upsert_all(session, Game, [{
+    upsert_all(session, Game, [{
         "id": "2026_P01_A_B", "season": 2026, "phase": "pre", "week": 1,
         "home_team": "B", "away_team": "A", "status": "final", "source": "espn",
     }])
@@ -64,7 +35,7 @@ def test_heterogeneous_rows_keep_all_columns(session):
         {"game_id": "2026_P01_A_B", "play_id": 2, "play_type": "pass",
          "passer_id": "espn:1", "receiver_id": "espn:2", "yards_gained": 12.0},
     ]
-    _upsert_all(session, Play, rows)
+    upsert_all(session, Play, rows)
     session.commit()
     p2 = session.get(Play, ("2026_P01_A_B", 2))
     assert p2.passer_id == "espn:1" and p2.yards_gained == 12.0

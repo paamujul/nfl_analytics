@@ -1,0 +1,68 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Workload Identity Federation instead of a long-lived service-account key.
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  REGION: ${{ vars.GCP_REGION }}
+  REPO: ${{ vars.ARTIFACT_REPO }}
+  SERVICE: nfl-analytics-api
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/${{ vars.ARTIFACT_REPO }}/nfl-analytics:${{ github.sha }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE" backend
+          docker push "$IMAGE"
+
+      # Migrations run before the new image serves traffic, against the session
+      # pooler (5432) -- the transaction pooler (6543) cannot run DDL, and the
+      # direct db.<ref> endpoint is IPv6-only.
+      - name: Run migrations
+        run: |
+          docker run --rm -e DATABASE_URL="${{ secrets.DATABASE_URL_SESSION }}" \
+            "$IMAGE" alembic upgrade head
+
+      - name: Deploy API
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" --region "$REGION" \
+            --memory 512Mi --cpu 1 --concurrency 80 \
+            --min-instances 0 --max-instances 3 --timeout 60s \
+            --set-env-vars DISABLE_INGEST=1,AUTO_SEED=0,ALLOWED_ORIGINS=${{ vars.FRONTEND_ORIGIN }} \
+            --set-secrets DATABASE_URL=nfl-database-url:latest \
+            --allow-unauthenticated
+
+      - name: Update scheduled jobs
+        run: |
+          # poll exits in seconds when nothing is live; the nflverse refresh
+          # loads season parquet and needs real memory (1 GB gets OOM-killed)
+          gcloud run jobs update nfl-analytics-poll \
+            --image "$IMAGE" --region "$REGION" \
+            --memory 512Mi --task-timeout 300s --max-retries 1 \
+            --command python --args=-m,app.cli,poll-once \
+            --set-secrets DATABASE_URL=nfl-database-url:latest
+          gcloud run jobs update nfl-analytics-nflverse-refresh \
+            --image "$IMAGE" --region "$REGION" \
+            --memory 2Gi --task-timeout 1800s --max-retries 1 \
+            --command python --args=-m,app.cli,refresh-nflverse,2026 \
+            --set-secrets DATABASE_URL=nfl-database-url:latest

@@ -75,18 +75,25 @@ export default function DefenseLabPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [loading, setLoading] = useState(true);
+  const [rosterFailed, setRosterFailed] = useState(false);
+
   useEffect(() => {
-    api.teams(season, phase).then((t) => setTeams(t.filter((x) => x.games > 0))).catch(() => {});
+    api.teams(season, phase).then((t) => setTeams(t.filter((x) => x.games > 0)))
+      .catch((e) => setError(String(e)));
   }, [season, phase]);
 
   useEffect(() => {
-    setProfile(null); setError(null);
-    api.defense(team, season, phase).then(setProfile).catch((e) => setError(String(e)));
+    setProfile(null); setError(null); setLoading(true);
+    api.defense(team, season, phase).then(setProfile)
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
   }, [team, season, phase]);
 
   useEffect(() => {
-    setRoster([]); setSelected([]); setImpact(null);
-    api.roster(team, side, season, phase).then(setRoster).catch(() => {});
+    setRoster([]); setSelected([]); setImpact(null); setRosterFailed(false);
+    api.roster(team, side, season, phase).then(setRoster)
+      .catch(() => setRosterFailed(true));
   }, [team, side, season, phase]);
 
   useEffect(() => {
@@ -115,6 +122,7 @@ export default function DefenseLabPage() {
       </div>
 
       {error && <div className="error-box">{error}</div>}
+      {loading && !error && <div className="loading">Loading {team} defense…</div>}
       {profile && (
         <>
           <div className="verdict" style={{ borderLeftColor: profile.team.color ?? 'var(--series-1)' }}>
@@ -156,7 +164,13 @@ export default function DefenseLabPage() {
             {p.name} <small>{p.position}{p.avg_snap_pct != null ? ` · ${Math.round(p.avg_snap_pct * 100)}% snaps` : ''}</small>
           </button>
         ))}
-        {!roster.length && <span className="note">No roster data for this side/season yet.</span>}
+        {!roster.length && (
+          <span className="note">
+            {rosterFailed
+              ? 'Could not load the roster — retry in a moment.'
+              : 'No roster data for this side/season yet.'}
+          </span>
+        )}
       </div>
 
       {busy && <div className="loading">Crunching…</div>}

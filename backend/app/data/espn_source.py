@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 
 from app.config import ESPN_SITE_API, ESPN_TO_NFLVERSE_TEAM, PHASE_FROM_ESPN, PHASES
+from app.data.timeutil import to_utc_iso
 
 # Play "type.text" values that describe scrimmage pass/rush plays.
 PASS_TYPES = {
@@ -70,21 +71,20 @@ class EspnClient:
     async def close(self) -> None:
         await self._client.aclose()
 
+    async def get_json(self, url: str, params: dict | None = None) -> dict:
+        r = await self._client.get(url, params=params)
+        r.raise_for_status()
+        return r.json()
+
     async def scoreboard(self, season: int, phase: str, week: int) -> dict:
         params = {"seasontype": PHASES[phase], "week": week, "dates": season}
-        r = await self._client.get(f"{ESPN_SITE_API}/scoreboard", params=params)
-        r.raise_for_status()
-        return r.json()
+        return await self.get_json(f"{ESPN_SITE_API}/scoreboard", params)
 
     async def summary(self, event_id: str) -> dict:
-        r = await self._client.get(f"{ESPN_SITE_API}/summary", params={"event": event_id})
-        r.raise_for_status()
-        return r.json()
+        return await self.get_json(f"{ESPN_SITE_API}/summary", {"event": event_id})
 
     async def teams(self) -> dict:
-        r = await self._client.get(f"{ESPN_SITE_API}/teams", params={"limit": 40})
-        r.raise_for_status()
-        return r.json()
+        return await self.get_json(f"{ESPN_SITE_API}/teams", {"limit": 40})
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +127,7 @@ def normalize_scoreboard(payload: dict) -> list[dict]:
             "season": season, "phase": phase, "week": week,
             "home_team": home, "away_team": away,
             "home_score": home_score, "away_score": away_score,
-            "status": status, "kickoff": ev.get("date"), "source": "espn",
+            "status": status, "kickoff": to_utc_iso(ev.get("date")), "source": "espn",
         })
     return games
 
@@ -294,5 +294,5 @@ def normalize_summary_header(summary: dict) -> dict | None:
         "home_team": home, "away_team": away,
         "home_score": home_score, "away_score": away_score,
         "status": {"pre": "scheduled", "in": "in", "post": "final"}.get(state, state),
-        "kickoff": comp.get("date"), "source": "espn",
+        "kickoff": to_utc_iso(comp.get("date")), "source": "espn",
     }

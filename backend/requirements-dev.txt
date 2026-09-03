@@ -1,0 +1,5 @@
+# Test-only dependencies. Kept out of the production image, which previously
+# shipped pytest despite .dockerignore excluding tests/.
+-r requirements.txt
+pytest==9.1.1
+pytest-asyncio==1.4.0

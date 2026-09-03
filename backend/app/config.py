@@ -10,7 +10,14 @@ DB_PATH = STORAGE_DIR / "nfl.db"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-DATABASE_URL = f"sqlite:///{DB_PATH}"
+# Postgres (Supabase) in deployment via DATABASE_URL; SQLite locally by default.
+# Supabase hands out "postgresql://..." URLs, which SQLAlchemy would route to
+# psycopg2; normalize onto psycopg3, which is what requirements.txt pins.
+DATABASE_URL = os.environ.get("DATABASE_URL") or f"sqlite:///{DB_PATH}"
+for _prefix in ("postgres://", "postgresql://"):
+    if DATABASE_URL.startswith(_prefix):
+        DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len(_prefix):]
+        break
 
 # Seasons the app knows about. 2025 is the validation season (nflverse),
 # 2026 is the live season (ESPN preseason now, nflverse once reg season data lands).
@@ -52,6 +59,3 @@ ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").spli
 AUTO_SEED = os.environ.get("AUTO_SEED", "1") != "0"
 SEED_SEASONS = (2025, 2026)
 
-# Refresh nflverse data for the live season once a day (EPA, participation).
-NFLVERSE_NIGHTLY = os.environ.get("NFLVERSE_NIGHTLY", "1") != "0"
-NFLVERSE_REFRESH_SECONDS = 24 * 60 * 60

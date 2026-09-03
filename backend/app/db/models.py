@@ -23,7 +23,7 @@ class Team(Base):
     division: Mapped[str | None] = mapped_column(String(16))
     color: Mapped[str | None] = mapped_column(String(9))
     color2: Mapped[str | None] = mapped_column(String(9))
-    logo: Mapped[str | None] = mapped_column(String(256))
+    logo: Mapped[str | None] = mapped_column(String(512))
     espn_id: Mapped[str | None] = mapped_column(String(8))
 
 
@@ -34,10 +34,10 @@ class Player(Base):
     # players only seen through ESPN (preseason bodies mostly).
     id: Mapped[str] = mapped_column(String(24), primary_key=True)
     espn_id: Mapped[str | None] = mapped_column(String(12), index=True)
-    name: Mapped[str] = mapped_column(String(64), index=True)
+    name: Mapped[str] = mapped_column(String(128), index=True)
     position: Mapped[str | None] = mapped_column(String(8))
     team: Mapped[str | None] = mapped_column(String(4), index=True)
-    headshot: Mapped[str | None] = mapped_column(String(256))
+    headshot: Mapped[str | None] = mapped_column(String(512))
 
 
 class Game(Base):
@@ -154,7 +154,7 @@ class SyncLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     source: Mapped[str] = mapped_column(String(12))  # espn|nflverse
-    scope: Mapped[str] = mapped_column(String(64))
+    scope: Mapped[str] = mapped_column(String(128))
     status: Mapped[str] = mapped_column(String(8))  # ok|error
     message: Mapped[str | None] = mapped_column(Text)
     rows: Mapped[int | None] = mapped_column(Integer)
@@ -162,3 +162,5 @@ class SyncLog(Base):
         String(32),
         default=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds"),
     )
+
+    __table_args__ = (Index("ix_sync_log_status_id", "status", "id"),)

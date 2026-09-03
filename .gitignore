@@ -27,3 +27,6 @@ backend/storage/*.db-shm
 
 # stray local clone of this same repo (see DEPLOY_ORACLE.md step 4)
 /nfl_analytics/
+
+# Local-only architecture notes, deliberately never committed
+ARCHITECTURE.local.html

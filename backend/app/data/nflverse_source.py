@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 
 from app.config import CACHE_DIR, PHASE_FROM_NFLVERSE
+from app.data.timeutil import nflverse_kickoff
 
 os.environ.setdefault("NFLREADPY_CACHE_MODE", "filesystem")
 os.environ.setdefault("NFLREADPY_CACHE_DIR", str(CACHE_DIR))
@@ -16,32 +17,10 @@ os.environ.setdefault("NFLREADPY_CACHE_DIR", str(CACHE_DIR))
 import nflreadpy  # noqa: E402  (env vars must be set before import)
 import polars as pl  # noqa: E402
 from sqlalchemy import delete  # noqa: E402
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert  # noqa: E402
 
 from app.db.models import Game, Play, Player, PlayerGameStat, SnapCount, SyncLog, Team  # noqa: E402
 from app.db.session import db_session  # noqa: E402
-
-
-def _upsert_all(session, model, rows: list[dict], chunk: int = 2000) -> int:
-    if not rows:
-        return 0
-    pk_cols = [c.name for c in model.__table__.primary_key.columns]
-    # multi-row inserts take their column list from the first row, so pad
-    # every row to the full column set (using model defaults where declared)
-    cols = list(model.__table__.columns)
-    defaults = {c.name: c.default.arg for c in cols
-                if c.default is not None and c.default.is_scalar}
-    rows = [{c.name: r.get(c.name, defaults.get(c.name)) for c in cols} for r in rows]
-    for i in range(0, len(rows), chunk):
-        batch = rows[i:i + chunk]
-        stmt = sqlite_insert(model.__table__).values(batch)
-        update_cols = {
-            c.name: stmt.excluded[c.name]
-            for c in model.__table__.columns if c.name not in pk_cols
-        }
-        stmt = stmt.on_conflict_do_update(index_elements=pk_cols, set_=update_cols)
-        session.execute(stmt)
-    return len(rows)
+from app.db.upsert import upsert_all  # noqa: E402
 
 
 def _log(session, scope: str, status: str, message: str | None = None, rows: int | None = None):
@@ -57,7 +36,7 @@ def sync_teams() -> int:
         "logo": r.get("team_logo_espn"), "espn_id": str(r.get("team_id") or ""),
     } for r in df.to_dicts()]
     with db_session() as s:
-        n = _upsert_all(s, Team, rows)
+        n = upsert_all(s, Team, rows)
         _log(s, "teams", "ok", rows=n)
     return n
 
@@ -76,14 +55,14 @@ def sync_schedules(season: int) -> int:
             "home_team": r["home_team"], "away_team": r["away_team"],
             "home_score": r.get("home_score"), "away_score": r.get("away_score"),
             "status": "final" if finished else "scheduled",
-            "kickoff": f'{r.get("gameday", "")}T{r.get("gametime") or "00:00"}',
+            "kickoff": nflverse_kickoff(r.get("gameday"), r.get("gametime")),
             "source": "nflverse",
         })
     with db_session() as s:
         # don't clobber espn_event_id set by the live ingester
         for row in rows:
             row.pop("espn_event_id")
-        n = _upsert_all(s, Game, rows)
+        n = upsert_all(s, Game, rows)
         _log(s, f"schedules {season}", "ok", rows=n)
     return n
 
@@ -119,8 +98,8 @@ def sync_players_and_stats(season: int) -> int:
             "rec_td": int(r.get("receiving_tds") or 0),
         })
     with db_session() as s:
-        _upsert_all(s, Player, list(players.values()))
-        n = _upsert_all(s, PlayerGameStat, stats)
+        upsert_all(s, Player, list(players.values()))
+        n = upsert_all(s, PlayerGameStat, stats)
         _log(s, f"player_stats {season}", "ok", rows=n)
     return n
 
@@ -208,7 +187,7 @@ def sync_pbp(season: int) -> int:
     with db_session() as s:
         # bulk replace the season's plays: simpler than row-diffing, idempotent
         s.execute(delete(Play).where(Play.game_id.in_(game_ids)))
-        n = _upsert_all(s, Play, rows, chunk=1000)
+        n = upsert_all(s, Play, rows)
         has_part = part is not None and len(part) > 0
         _log(s, f"pbp {season}", "ok",
              message=f"participation={'yes' if has_part else 'no'}", rows=n)
@@ -232,7 +211,7 @@ def sync_snap_counts(season: int) -> int:
         "defense_pct": float(r.get("defense_pct") or 0),
     } for r in df.to_dicts()]
     with db_session() as s:
-        n = _upsert_all(s, SnapCount, rows)
+        n = upsert_all(s, SnapCount, rows)
         _log(s, f"snap_counts {season}", "ok", rows=n)
     return n
 
@@ -240,23 +219,39 @@ def sync_snap_counts(season: int) -> int:
 def backfill_season(season: int) -> dict[str, int]:
     """Full nflverse backfill for one season.
 
-    Each dataset is independent: early in a season nflverse publishes some
-    files before others (and none before week 1), so one missing release
-    must not abort the rest.
+    Most datasets are independent: early in a season nflverse publishes some
+    files before others (and none before week 1), so one missing release must
+    not abort the rest. Schedules is the exception -- plays and player stats
+    carry foreign keys onto games, so writing them after a failed schedules
+    step produces orphan rows. SQLite never enforced those FKs; Postgres does.
+
+    Returns per-step row counts plus a "failed" count for callers that need an
+    exit status.
     """
-    steps = {
-        "teams": sync_teams,
-        "schedules": lambda: sync_schedules(season),
-        "player_stats": lambda: sync_players_and_stats(season),
-        "plays": lambda: sync_pbp(season),
-        "snap_counts": lambda: sync_snap_counts(season),
-    }
+    steps = [
+        ("teams", sync_teams, ()),
+        ("schedules", lambda: sync_schedules(season), ()),
+        ("player_stats", lambda: sync_players_and_stats(season), ("schedules",)),
+        ("plays", lambda: sync_pbp(season), ("schedules",)),
+        ("snap_counts", lambda: sync_snap_counts(season), ()),
+    ]
     out: dict[str, int] = {}
-    for name, fn in steps.items():
+    failed: set[str] = set()
+    for name, fn, requires in steps:
+        blockers = sorted(failed.intersection(requires))
+        if blockers:
+            out[name] = 0
+            failed.add(name)
+            with db_session() as s:
+                _log(s, f"{name} {season}", "error",
+                     message=f"skipped: {', '.join(blockers)} failed")
+            continue
         try:
             out[name] = fn()
         except Exception as e:
             out[name] = 0
+            failed.add(name)
             with db_session() as s:
                 _log(s, f"{name} {season}", "error", message=str(e)[:300])
+    out["failed"] = len(failed)
     return out

@@ -41,7 +41,8 @@ export default function ComparePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.teams(season, phase).then((t) => setTeams(t.filter((x) => x.games > 0))).catch(() => {});
+    api.teams(season, phase).then((t) => setTeams(t.filter((x) => x.games > 0)))
+      .catch((e) => setError(String(e)));
   }, [season, phase]);
 
   useEffect(() => {

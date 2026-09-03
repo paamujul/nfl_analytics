@@ -10,8 +10,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from app.config import SEED_SEASONS
 from app.db.models import Game, SyncLog
@@ -81,17 +82,34 @@ def start_seed_if_needed() -> bool:
     return True
 
 
-def refresh_nflverse(season: int) -> None:
-    """Daily refresh of the live season's nflverse data (worker thread)."""
+def refresh_nflverse(season: int) -> int:
+    """Refresh the live season's nflverse data. Returns the number of failed steps.
+
+    Runs synchronously -- deployment invokes this as its own scheduled job
+    (`python -m app.cli refresh-nflverse`), which replaced the fire-and-forget
+    daemon thread the live poller used to spawn. A one-shot job would have
+    exited out from under that thread mid-download.
+    """
     from app.data.nflverse_source import backfill_season
     try:
         out = backfill_season(season)
-        _log(f"nflverse refresh {season}", "ok", rows=out.get("plays"))
+        failed = out.get("failed", 0)
+        _log(f"nflverse refresh {season}", "error" if failed else "ok",
+             rows=out.get("plays"),
+             message=f"{failed} step(s) failed" if failed else None)
+        return failed
     except Exception as e:
         log.warning("nflverse refresh %s failed: %s", season, e)
-        _log(f"nflverse refresh {season}", "error", message=str(e))
+        _log(f"nflverse refresh {season}", "error", message=str(e)[:300])
+        return 1
 
 
-def start_nflverse_refresh(season: int) -> None:
-    threading.Thread(target=refresh_nflverse, args=(season,),
-                     name="nflverse-refresh", daemon=True).start()
+def prune_sync_log(keep_days: int = 30) -> int:
+    """Drop sync_log rows older than keep_days, returning how many went.
+
+    The poller writes a handful of rows per cycle and nothing ever cleaned up,
+    so this table grew without bound -- roughly 5,700 rows a day during games.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=keep_days)).isoformat()
+    with db_session() as s:
+        return s.execute(delete(SyncLog).where(SyncLog.created_at < cutoff)).rowcount
