@@ -104,15 +104,50 @@ export interface LiveGame {
   kickoff: string | null;
 }
 
-// In production the API lives on a separate host (Railway); set VITE_API_BASE
+// In production the API lives on a separate host (Cloud Run); set VITE_API_BASE
 // to that origin. Empty default keeps dev on the Vite proxy (same origin).
 const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '');
 
+// The API scales to zero, so the first request after an idle stretch pays a
+// cold start. Wait generously, and retry once on the failures a cold start
+// actually produces -- a dropped connection or a 5xx from a half-warm instance.
+const TIMEOUT_MS = 15_000;
+const RETRY_DELAY_MS = 800;
+
+class ApiError extends Error {
+  // plain field, not a parameter property: tsconfig sets erasableSyntaxOnly
+  status: number;
+  constructor(status: number, statusText: string) {
+    super(`Request failed (${status} ${statusText})`);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function attempt<T>(url: string): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const r = await fetch(url, { signal: controller.signal });
+    if (!r.ok) throw new ApiError(r.status, r.statusText);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function get<T>(path: string): Promise<T> {
   const url = `${API_BASE}${path}`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText} — ${url}`);
-  return r.json();
+  try {
+    return await attempt<T>(url);
+  } catch (e) {
+    // don't retry a 4xx -- the request itself is wrong and will fail again
+    if (e instanceof ApiError && e.status < 500) throw e;
+    await sleep(RETRY_DELAY_MS);
+    return attempt<T>(url);
+  }
 }
 
 export const api = {

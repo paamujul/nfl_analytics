@@ -6,20 +6,24 @@ The app has two halves with different hosting needs:
   as an always-on process with a persistent disk. → **Railway** (~$5/month Hobby).
 - **Frontend** — a static Vite/React bundle. → **Vercel** (free Hobby tier).
 
-GitHub Pages and Vercel *alone* can't host this: they serve static files and
-short-lived serverless functions, neither of which can run a continuous poller or
-keep a SQLite file between requests.
+> **Superseded.** This page describes the app as it was: one always-on process
+> with an in-process poller and a SQLite file. The poller is now a scheduled job
+> and the database is managed Postgres, so scale-to-zero hosting *does* work —
+> see [DEPLOY_SERVERLESS.md](DEPLOY_SERVERLESS.md), which is free. This guide is
+> kept for the managed always-on option, which still buys you 45-second live
+> scores instead of a 10-minute lag.
 
 ## Pick a path
 
-| | Cost | Effort | Guide |
+| | Cost | Live lag | Guide |
 |---|---|---|---|
-| **Oracle Cloud Always Free VM** + Caddy | Free, indefinitely | ~30 min, self-managed box | [DEPLOY_ORACLE.md](DEPLOY_ORACLE.md) |
-| **Railway** + Vercel | ~$5/month | ~10 min, fully managed | this file |
+| **Cloud Run + Supabase + Pages** | Free | ~10 min | [DEPLOY_SERVERLESS.md](DEPLOY_SERVERLESS.md) |
+| **Oracle Cloud Always Free VM** + Caddy | Free | 45 s | [DEPLOY_ORACLE.md](DEPLOY_ORACLE.md) |
+| **Railway** + Vercel | ~$5/month | 45 s | this file |
 
-Free container tiers (Render, Koyeb, Fly) don't work here: they sleep when idle,
-can't attach a persistent disk on the free plan, and their 512 MB instances are
-too small for the nflverse seed.
+The two always-on paths keep the in-process poller and its 45-second cadence.
+The serverless path trades that for a scheduled job, which is what makes free
+scale-to-zero hosting possible at all.
 
 ---
 

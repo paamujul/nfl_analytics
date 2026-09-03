@@ -1,8 +1,11 @@
-"""REST endpoints. Everything reads from SQLite only — never a live API call."""
+"""REST endpoints. Everything reads from the database only — never a live API call."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from fastapi.responses import JSONResponse
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.analytics.compare import compare_teams
@@ -11,8 +14,12 @@ from app.analytics.lineup_impact import lineup_impact, roster_for_side
 from app.analytics.player_quarters import player_quarter_splits
 from app.analytics.route_charts import player_routes
 from app.analytics.team_stats import season_team_totals, team_detail
+from app.data.timeutil import parse_iso
 from app.db.models import Game, SyncLog
 from app.db.session import get_db
+
+# how stale last_successful_sync may get before /health reports unhealthy
+HEALTH_MAX_SYNC_AGE = timedelta(hours=6)
 
 router = APIRouter(prefix="/api")
 
@@ -21,7 +28,7 @@ router = APIRouter(prefix="/api")
 def seasons(db: Session = Depends(get_db)):
     rows = db.execute(
         select(Game.season, Game.phase, func.count(Game.id),
-               func.sum(func.iif(Game.status != "scheduled", 1, 0)))
+               func.sum(case((Game.status != "scheduled", 1), else_=0)))
         .group_by(Game.season, Game.phase)
     ).all()
     out: dict[int, list] = {}
@@ -119,3 +126,27 @@ def status(db: Session = Depends(get_db)):
             "status": r.status, "rows": r.rows, "message": r.message,
         } for r in recent],
     }
+
+
+@router.get("/health")
+def health(db: Session = Depends(get_db)):
+    """Liveness + freshness, for uptime monitoring.
+
+    A plain 200 only proves the web process is up. The scheduled ingester can
+    wedge while the API stays perfectly healthy, so report 503 once the last
+    successful sync goes stale -- that is the failure worth being paged for.
+    """
+    last_ok = db.scalar(
+        select(SyncLog.created_at).where(SyncLog.status == "ok")
+        .order_by(SyncLog.id.desc()).limit(1)
+    )
+    age = None
+    if last_ok:
+        synced = parse_iso(last_ok)
+        if synced:
+            age = (datetime.now(timezone.utc) - synced).total_seconds()
+    ok = age is not None and age <= HEALTH_MAX_SYNC_AGE.total_seconds()
+    body = {"status": "ok" if ok else "stale",
+            "last_successful_sync": last_ok,
+            "age_seconds": int(age) if age is not None else None}
+    return JSONResponse(body, status_code=200 if ok else 503)

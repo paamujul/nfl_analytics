@@ -1,4 +1,9 @@
-"""FastAPI app: REST API + background live-ingestion service."""
+"""FastAPI app: the REST API.
+
+Deployment runs this read-only -- DISABLE_INGEST=1 and AUTO_SEED=0 -- with
+ingestion handled by scheduled jobs (see app/cli.py). The in-process ingester
+and self-seed below exist so local development still works from one command.
+"""
 from __future__ import annotations
 
 import logging
@@ -36,7 +41,9 @@ app = FastAPI(title="NFL Analytics", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", *ALLOWED_ORIGINS],
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    # Cloudflare Pages and Vercel both give every preview deploy its own
+    # subdomain, so these have to be matched by pattern, not listed.
+    allow_origin_regex=r"https://.*\.(pages\.dev|vercel\.app)",
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,0 +1,3 @@
+# createBrowserRouter uses real history paths, so every unmatched URL has to
+# fall through to the SPA shell. Cloudflare Pages serves real files first.
+/*  /index.html  200

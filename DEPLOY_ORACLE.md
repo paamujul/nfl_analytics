@@ -25,8 +25,14 @@ records yourself; the setup script does the rest on the box.
    can't be changed later.
 2. **Compute → Instances → Create instance.**
 3. **Image:** Ubuntu 24.04 (Canonical Ubuntu).
-4. **Shape:** *Ampere → VM.Standard.A1.Flex*, **2 OCPU / 12 GB** (the free
-   allowance is 4 OCPU / 24 GB total — 2/12 leaves room for a second box).
+4. **Shape:** *Ampere → VM.Standard.A1.Flex*, **1 OCPU / 6 GB**.
+
+   > Oracle **halved** the Always Free Ampere allowance in 2026, from 3,000
+   > OCPU-hours + 18,000 GB-hours a month to 1,500 + 9,000 — that is 4 OCPU /
+   > 24 GB down to **2 OCPU / 12 GB** always-on. Taking the full 2/12 would sit
+   > at exactly 100% of the ceiling with no headroom, so one stray instance
+   > starts billing. 1 OCPU / 6 GB is ample for this app, lands scarce A1
+   > capacity far more often, and leaves half the allowance spare.
 
    > **Do not pick the AMD `VM.Standard.E2.1.Micro`.** It has 1 GB of RAM and the
    > first-boot nflverse seed will be OOM-killed part way through.

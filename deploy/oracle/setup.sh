@@ -89,6 +89,15 @@ install -m 644 "$APP_DIR/deploy/oracle/nfl-analytics.service" /etc/systemd/syste
 systemctl daemon-reload
 systemctl enable --now nfl-analytics
 
+# The nightly nflverse refresh used to run as a thread inside the API process.
+# It is a standalone command now (shared with the Cloud Run job), so schedule it.
+echo "==> Installing nightly nflverse refresh"
+cat > /etc/cron.d/nfl-analytics-nflverse <<EOF
+# m h dom mon dow user command
+0 9 * * * $SVC_USER cd $APP_DIR/backend && $APP_DIR/backend/.venv/bin/python -m app.cli refresh-nflverse \$(date +\%Y) >> /var/log/nfl-analytics-nflverse.log 2>&1
+EOF
+chmod 644 /etc/cron.d/nfl-analytics-nflverse
+
 echo "==> Configuring Caddy for $DOMAIN"
 if [[ "$MODE" == "--api-only" ]]; then
   cat > /etc/caddy/Caddyfile <<EOF

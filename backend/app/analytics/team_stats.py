@@ -96,7 +96,9 @@ def team_detail(session: Session, team: str, season: int, phase: str) -> dict:
         )
         .join(Player, Player.id == PlayerGameStat.player_id)
         .where(PlayerGameStat.game_id.in_(game_ids), PlayerGameStat.team == team)
-        .group_by(PlayerGameStat.player_id)
+        # every selected non-aggregate has to be grouped: SQLite silently picks
+        # an arbitrary row for the rest, Postgres rejects the query outright
+        .group_by(PlayerGameStat.player_id, Player.name, Player.position, Player.headshot)
     ).all()
 
     players = [{

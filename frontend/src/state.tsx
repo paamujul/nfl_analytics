@@ -45,6 +45,8 @@ export function SeasonProvider({ children }: { children: ReactNode }) {
         setSeason(last.season);
         setPhase(last.phase);
       }
+      // deliberate: App.tsx falls back to a hardcoded season/phase list, so a
+      // failed lookup degrades to sane defaults rather than blocking the page
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

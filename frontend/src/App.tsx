@@ -29,9 +29,13 @@ function LiveBanner() {
   const [games, setGames] = useState<LiveGame[]>([]);
   useEffect(() => {
     let stop = false;
-    const tick = () => api.live().then((g) => { if (!stop) setGames(g); }).catch(() => {});
+    const tick = () => api.live().then((g) => { if (!stop) setGames(g); })
+      // a missing banner is the right failure here -- never surface this
+      .catch(() => { if (!stop) setGames([]); });
     tick();
-    const t = setInterval(tick, 30_000);
+    // matches the scheduled ingester's cadence; polling faster than the data
+    // is written just wakes the API for nothing
+    const t = setInterval(tick, 5 * 60_000);
     return () => { stop = true; clearInterval(t); };
   }, []);
   if (!games.length) return null;
