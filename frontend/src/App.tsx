@@ -33,9 +33,9 @@ function LiveBanner() {
       // a missing banner is the right failure here -- never surface this
       .catch(() => { if (!stop) setGames([]); });
     tick();
-    // matches the scheduled ingester's cadence; polling faster than the data
-    // is written just wakes the API for nothing
-    const t = setInterval(tick, 5 * 60_000);
+    // matches the in-process ingester, which refreshes live scores every 45s
+    // during games; there's no cold start left to avoid by polling slower
+    const t = setInterval(tick, 45_000);
     return () => { stop = true; clearInterval(t); };
   }, []);
   if (!games.length) return null;

@@ -104,15 +104,17 @@ export interface LiveGame {
   kickoff: string | null;
 }
 
-// In production the API lives on a separate host (Cloud Run); set VITE_API_BASE
-// to that origin. Empty default keeps dev on the Vite proxy (same origin).
-const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '');
+// The SPA ships inside the backend image and is served by the same FastAPI
+// process that answers /api, so every call is same-origin and a relative path
+// is all we need. Dev keeps that shape via the Vite proxy in vite.config.ts.
 
-// The API scales to zero, so the first request after an idle stretch pays a
-// cold start. Wait generously, and retry once on the failures a cold start
-// actually produces -- a dropped connection or a 5xx from a half-warm instance.
-const TIMEOUT_MS = 15_000;
-const RETRY_DELAY_MS = 800;
+// One box means no cold start, but it does go away briefly: a deploy restarts
+// the unit, and uvicorn drains the in-flight ingest cycle before exiting, so
+// the API can be unreachable for 5-15s. Live migration and cloudflared
+// reconnects blip it the same way. Retry across a window wide enough to
+// outlast a deploy instead of a single quick nudge.
+const TIMEOUT_MS = 8_000;          // warm VM answers <1s; an uncached /api/compare is 1-3s
+const RETRY_DELAYS_MS = [800, 2400];
 
 class ApiError extends Error {
   // plain field, not a parameter property: tsconfig sets erasableSyntaxOnly
@@ -126,11 +128,11 @@ class ApiError extends Error {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function attempt<T>(url: string): Promise<T> {
+async function attempt<T>(path: string): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const r = await fetch(url, { signal: controller.signal });
+    const r = await fetch(path, { signal: controller.signal });
     if (!r.ok) throw new ApiError(r.status, r.statusText);
     return await r.json();
   } finally {
@@ -139,14 +141,15 @@ async function attempt<T>(url: string): Promise<T> {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const url = `${API_BASE}${path}`;
-  try {
-    return await attempt<T>(url);
-  } catch (e) {
-    // don't retry a 4xx -- the request itself is wrong and will fail again
-    if (e instanceof ApiError && e.status < 500) throw e;
-    await sleep(RETRY_DELAY_MS);
-    return attempt<T>(url);
+  for (let i = 0; ; i++) {
+    try {
+      return await attempt<T>(path);
+    } catch (e) {
+      // don't retry a 4xx -- the request itself is wrong and will fail again
+      if (e instanceof ApiError && e.status < 500) throw e;
+      if (i === RETRY_DELAYS_MS.length) throw e;
+      await sleep(RETRY_DELAYS_MS[i]);
+    }
   }
 }
 
