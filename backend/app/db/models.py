@@ -230,6 +230,49 @@ class SnapCount(Base):
     defense_pct: Mapped[float] = mapped_column(Float, default=0.0)
 
 
+class Coach(Base):
+    """A coach, keyed by a kebab-case slug derived from the name ("andy-reid").
+
+    No nflverse dataset carries coach identity, so there is no upstream id to
+    borrow. The slug is stable enough for the one job it has -- joining
+    coaching_staff rows to a display name -- and readable in a query result.
+    """
+    __tablename__ = "coaches"
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    name: Mapped[str] = mapped_column(String(64))
+
+
+class CoachingStaff(Base):
+    """Who held each staff role for one team in one season.
+
+    The play-caller columns are the reason this table exists. On a large
+    minority of staffs the head coach calls the offensive plays rather than the
+    OC (and defensive play-calling splits the same way), so crediting a call to
+    the coordinator by default silently misattributes it. Where the caller is
+    unknown the column is NULL and consumers should fall back to the head coach
+    -- sync_coaching_staff logs each fallback it applies.
+
+    Head coaches are derived from load_schedules and are ground truth.
+    Coordinators are hand-entered, unverified, and frequently NULL on purpose;
+    `verified` says whether a human has checked the row. Treat verified=False
+    coordinator/play-caller fields as a hypothesis, not a fact.
+    """
+    __tablename__ = "coaching_staff"
+
+    season: Mapped[int] = mapped_column(Integer, primary_key=True)
+    team: Mapped[str] = mapped_column(String(4), primary_key=True)
+
+    head_coach_id: Mapped[str | None] = mapped_column(ForeignKey("coaches.id"))
+    oc_id: Mapped[str | None] = mapped_column(ForeignKey("coaches.id"))
+    dc_id: Mapped[str | None] = mapped_column(ForeignKey("coaches.id"))
+    offensive_play_caller_id: Mapped[str | None] = mapped_column(ForeignKey("coaches.id"))
+    defensive_play_caller_id: Mapped[str | None] = mapped_column(ForeignKey("coaches.id"))
+
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str | None] = mapped_column(Text)  # e.g. mid-season HC change
+
+
 class SyncLog(Base):
     __tablename__ = "sync_log"
 

@@ -10,6 +10,12 @@ DB_PATH = STORAGE_DIR / "nfl.db"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Checked-in seed data that is not downloadable from any upstream feed --
+# currently only coaches.yml, since no nflverse dataset carries coordinators.
+# Overridable so a container can mount it somewhere other than the repo layout.
+DATA_DIR = Path(os.environ.get("DATA_DIR", BACKEND_DIR.parent / "deploy" / "data"))
+COACHES_YML = DATA_DIR / "coaches.yml"
+
 # Postgres (Supabase) in deployment via DATABASE_URL; SQLite locally by default.
 # Supabase hands out "postgresql://..." URLs, which SQLAlchemy would route to
 # psycopg2; normalize onto psycopg3, which is what requirements.txt pins.

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from app.config import CACHE_DIR, PHASE_FROM_NFLVERSE
+from app.config import CACHE_DIR, COACHES_YML, PHASE_FROM_NFLVERSE
 from app.data.timeutil import nflverse_kickoff
 
 os.environ.setdefault("NFLREADPY_CACHE_MODE", "filesystem")
@@ -18,7 +18,10 @@ import nflreadpy  # noqa: E402  (env vars must be set before import)
 import polars as pl  # noqa: E402
 from sqlalchemy import delete  # noqa: E402
 
-from app.db.models import Game, Play, Player, PlayerGameStat, SnapCount, SyncLog, Team  # noqa: E402
+from app.db.models import (  # noqa: E402
+    Coach, CoachingStaff, Game, Play, Player, PlayerGameStat, SnapCount,
+    SyncLog, Team,
+)
 from app.db.session import db_session  # noqa: E402
 from app.db.upsert import upsert_all  # noqa: E402
 
@@ -324,6 +327,110 @@ def sync_pbp(season: int) -> int:
     return n
 
 
+def sync_coaching_staff(season: int) -> int:
+    """Load coaches.yml for one season, cross-checking head coaches upstream.
+
+    The YAML's head coaches were themselves derived from load_schedules, so this
+    check exists to catch the file drifting away from reality later -- a season
+    added by hand, a team renamed, an edit that fat-fingers a name. A mismatch
+    writes a sync_log error row and the upstream value is NOT substituted: the
+    file stays the system of record so a human resolves the disagreement, rather
+    than the discrepancy being silently papered over and never noticed.
+
+    Where a play-caller is null the head coach is used and the substitution is
+    counted in the sync_log message -- fallbacks must be visible, because
+    "the OC called it" and "we assumed the HC called it" are different claims.
+    """
+    import yaml  # PyYAML; arrives transitively via uvicorn[standard]
+
+    if not COACHES_YML.exists():
+        with db_session() as s:
+            _log(s, f"coaching_staff {season}", "error",
+                 message=f"missing seed file {COACHES_YML}")
+        return 0
+
+    doc = yaml.safe_load(COACHES_YML.read_text()) or {}
+    names: dict[str, str] = doc.get("names") or {}
+    staff = (doc.get("staff") or {}).get(season)
+    if not staff:
+        with db_session() as s:
+            _log(s, f"coaching_staff {season}", "error",
+                 message=f"no staff entries for {season} in {COACHES_YML.name}")
+        return 0
+
+    # Ground truth for the cross-check: the coach who worked the most games.
+    upstream: dict[str, str] = {}
+    try:
+        sched = nflreadpy.load_schedules([season])
+        counts: dict[str, dict[str, int]] = {}
+        for r in sched.to_dicts():
+            for side in ("home", "away"):
+                coach, team = r.get(f"{side}_coach"), r.get(f"{side}_team")
+                if coach and team:
+                    counts.setdefault(team, {})
+                    counts[team][coach] = counts[team].get(coach, 0) + 1
+        upstream = {t: max(c, key=c.get) for t, c in counts.items()}
+    except Exception as e:
+        upstream = {}
+        with db_session() as s:
+            _log(s, f"coaching_staff {season}", "error",
+                 message=f"head-coach cross-check unavailable: {str(e)[:200]}")
+
+    role_cols = {
+        "head_coach": "head_coach_id", "oc": "oc_id", "dc": "dc_id",
+        "offensive_play_caller": "offensive_play_caller_id",
+        "defensive_play_caller": "defensive_play_caller_id",
+    }
+
+    coaches: dict[str, dict] = {}
+    rows: list[dict] = []
+    mismatches: list[str] = []
+    fallbacks = 0
+
+    for team, entry in staff.items():
+        entry = entry or {}
+        # YAML 1.1 reads a bare NO (New Orleans) as boolean false, and ON/Y/N
+        # similarly. The generated file quotes every team key, but a hand-edit
+        # can drop the quotes, and the symptom is otherwise a baffling
+        # "value too long for varchar(4)" from the string "false".
+        if isinstance(team, bool):
+            team = "NO" if team is False else "ON"
+            mismatches.append(
+                f"unquoted YAML key parsed as a boolean; assuming {team!r}. "
+                "Quote team keys in coaches.yml.")
+        row = {"season": season, "team": team,
+               "verified": bool(entry.get("verified")),
+               "note": entry.get("note")}
+        for key, col in role_cols.items():
+            slug = entry.get(key)
+            row[col] = slug
+            if slug:
+                coaches[slug] = {"id": slug, "name": names.get(slug, slug)}
+
+        hc = row["head_coach_id"]
+        for col in ("offensive_play_caller_id", "defensive_play_caller_id"):
+            if not row[col] and hc:
+                row[col] = hc
+                fallbacks += 1
+
+        want = upstream.get(team)
+        if want and hc and names.get(hc, hc) != want:
+            mismatches.append(f"{team}: file={names.get(hc, hc)!r} schedules={want!r}")
+        rows.append(row)
+
+    with db_session() as s:
+        upsert_all(s, Coach, list(coaches.values()))
+        n = upsert_all(s, CoachingStaff, rows)
+        if mismatches:
+            _log(s, f"coaching_staff {season}", "error",
+                 message="head coach disagrees with load_schedules -- "
+                         + "; ".join(mismatches[:10]))
+        _log(s, f"coaching_staff {season}", "ok",
+             message=(f"play_caller fallbacks to HC={fallbacks}, "
+                      f"hc_mismatches={len(mismatches)}"), rows=n)
+    return n
+
+
 def sync_snap_counts(season: int) -> int:
     try:
         df = nflreadpy.load_snap_counts([season])
@@ -364,6 +471,9 @@ def backfill_season(season: int) -> dict[str, int]:
         ("player_stats", lambda: sync_players_and_stats(season), ("schedules",)),
         ("plays", lambda: sync_pbp(season), ("schedules",)),
         ("snap_counts", lambda: sync_snap_counts(season), ()),
+        # coaching_staff reads a checked-in file and cross-checks against
+        # load_schedules; it needs no table of ours, hence no requires edge.
+        ("coaching_staff", lambda: sync_coaching_staff(season), ()),
     ]
     out: dict[str, int] = {}
     failed: set[str] = set()

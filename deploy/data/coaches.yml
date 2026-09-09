@@ -1,0 +1,1314 @@
+# Coaching staff by team-season, 2021-2025.
+#
+# HOW THIS FILE WAS BUILT, AND HOW FAR TO TRUST IT
+#
+# head_coach: DERIVED, ground truth. Extracted programmatically from
+#   nflreadpy.load_schedules() home_coach/away_coach. Not typed from memory.
+#   Where a team changed coaches mid-season the most frequent coach (the one who
+#   coached the most games) is recorded and `note` describes the split.
+#
+# oc / dc / offensive_play_caller / defensive_play_caller: MODEL-GENERATED AND
+#   UNVERIFIED. No nflverse dataset carries coordinators, so these come from the
+#   author's own knowledge. They have NOT been checked against a source, and
+#   NEED HUMAN REVIEW before anyone trusts play-call attribution built on them.
+#   Entries the author was not confident about are deliberately left null --
+#   a null is honest, whereas a wrong coordinator name looks authoritative and
+#   silently misattributes every play that coach is credited with. Roughly half
+#   of the coordinator fields here are null by design; do not "helpfully" fill
+#   them in from memory without checking a source.
+#
+# offensive_play_caller / defensive_play_caller exist because the coordinator is
+#   frequently NOT the play-caller -- Andy Reid, Kyle Shanahan, Sean McVay and
+#   Sean Payton call their own offenses, and Todd Bowles and Brandon Staley
+#   called their own defenses. Where the caller is null, sync_coaching_staff
+#   falls back to the head coach and writes a sync_log row saying it did.
+#
+# verified: false everywhere until a human checks the row and flips it.
+
+staff:
+  2021:
+    "ARI":
+      head_coach: kliff-kingsbury
+      oc: null
+      dc: vance-joseph
+      offensive_play_caller: kliff-kingsbury
+      defensive_play_caller: null
+      verified: false
+    "ATL":
+      head_coach: arthur-smith
+      oc: dave-ragone
+      dc: dean-pees
+      offensive_play_caller: arthur-smith
+      defensive_play_caller: null
+      verified: false
+    "BAL":
+      head_coach: john-harbaugh
+      oc: greg-roman
+      dc: don-martindale
+      offensive_play_caller: greg-roman
+      defensive_play_caller: null
+      verified: false
+    "BUF":
+      head_coach: sean-mcdermott
+      oc: brian-daboll
+      dc: leslie-frazier
+      offensive_play_caller: brian-daboll
+      defensive_play_caller: null
+      verified: false
+    "CAR":
+      head_coach: matt-rhule
+      oc: joe-brady
+      dc: phil-snow
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "CHI":
+      head_coach: matt-nagy
+      oc: bill-lazor
+      dc: sean-desai
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "CIN":
+      head_coach: zac-taylor
+      oc: brian-callahan
+      dc: lou-anarumo
+      offensive_play_caller: zac-taylor
+      defensive_play_caller: null
+      verified: false
+    "CLE":
+      head_coach: kevin-stefanski
+      oc: alex-van-pelt
+      dc: joe-woods
+      offensive_play_caller: kevin-stefanski
+      defensive_play_caller: null
+      verified: false
+    "DAL":
+      head_coach: mike-mccarthy
+      oc: kellen-moore
+      dc: dan-quinn
+      offensive_play_caller: kellen-moore
+      defensive_play_caller: null
+      verified: false
+    "DEN":
+      head_coach: vic-fangio
+      oc: pat-shurmur
+      dc: ed-donatell
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "DET":
+      head_coach: dan-campbell
+      oc: anthony-lynn
+      dc: aaron-glenn
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "GB":
+      head_coach: matt-lafleur
+      oc: nathaniel-hackett
+      dc: joe-barry
+      offensive_play_caller: matt-lafleur
+      defensive_play_caller: null
+      verified: false
+    "HOU":
+      head_coach: david-culley
+      oc: tim-kelly
+      dc: lovie-smith
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "IND":
+      head_coach: frank-reich
+      oc: marcus-brady
+      dc: matt-eberflus
+      offensive_play_caller: frank-reich
+      defensive_play_caller: null
+      verified: false
+    "JAX":
+      head_coach: urban-meyer
+      oc: null
+      dc: null
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+      note: "mid-season change: Urban Meyer 13g (recorded); also Darrell Bevell 4g"
+    "KC":
+      head_coach: andy-reid
+      oc: eric-bieniemy
+      dc: steve-spagnuolo
+      offensive_play_caller: andy-reid
+      defensive_play_caller: steve-spagnuolo
+      verified: false
+    "LA":
+      head_coach: sean-mcvay
+      oc: kevin-o-connell
+      dc: raheem-morris
+      offensive_play_caller: sean-mcvay
+      defensive_play_caller: null
+      verified: false
+    "LAC":
+      head_coach: brandon-staley
+      oc: joe-lombardi
+      dc: null
+      offensive_play_caller: joe-lombardi
+      defensive_play_caller: brandon-staley
+      verified: false
+    "LV":
+      head_coach: rich-bisaccia
+      oc: greg-olson
+      dc: gus-bradley
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+      note: "mid-season change: Rich Bisaccia 13g (recorded); also Jon Gruden 5g"
+    "MIA":
+      head_coach: brian-flores
+      oc: null
+      dc: null
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "MIN":
+      head_coach: mike-zimmer
+      oc: klint-kubiak
+      dc: null
+      offensive_play_caller: null
+      defensive_play_caller: mike-zimmer
+      verified: false
+    "NE":
+      head_coach: bill-belichick
+      oc: josh-mcdaniels
+      dc: null
+      offensive_play_caller: josh-mcdaniels
+      defensive_play_caller: null
+      verified: false
+    "NO":
+      head_coach: sean-payton
+      oc: pete-carmichael
+      dc: null
+      offensive_play_caller: sean-payton
+      defensive_play_caller: null
+      verified: false
+    "NYG":
+      head_coach: joe-judge
+      oc: null
+      dc: patrick-graham
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "NYJ":
+      head_coach: robert-saleh
+      oc: mike-lafleur
+      dc: jeff-ulbrich
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "PHI":
+      head_coach: nick-sirianni
+      oc: shane-steichen
+      dc: jonathan-gannon
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "PIT":
+      head_coach: mike-tomlin
+      oc: matt-canada
+      dc: null
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "SEA":
+      head_coach: pete-carroll
+      oc: shane-waldron
+      dc: ken-norton-jr
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "SF":
+      head_coach: kyle-shanahan
+      oc: mike-mcdaniel
+      dc: demeco-ryans
+      offensive_play_caller: kyle-shanahan
+      defensive_play_caller: null
+      verified: false
+    "TB":
+      head_coach: bruce-arians
+      oc: byron-leftwich
+      dc: todd-bowles
+      offensive_play_caller: byron-leftwich
+      defensive_play_caller: todd-bowles
+      verified: false
+    "TEN":
+      head_coach: mike-vrabel
+      oc: todd-downing
+      dc: shane-bowen
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "WAS":
+      head_coach: ron-rivera
+      oc: scott-turner
+      dc: jack-del-rio
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+  2022:
+    "ARI":
+      head_coach: kliff-kingsbury
+      oc: null
+      dc: vance-joseph
+      offensive_play_caller: kliff-kingsbury
+      defensive_play_caller: null
+      verified: false
+    "ATL":
+      head_coach: arthur-smith
+      oc: dave-ragone
+      dc: dean-pees
+      offensive_play_caller: arthur-smith
+      defensive_play_caller: null
+      verified: false
+    "BAL":
+      head_coach: john-harbaugh
+      oc: greg-roman
+      dc: mike-macdonald
+      offensive_play_caller: greg-roman
+      defensive_play_caller: null
+      verified: false
+    "BUF":
+      head_coach: sean-mcdermott
+      oc: ken-dorsey
+      dc: leslie-frazier
+      offensive_play_caller: ken-dorsey
+      defensive_play_caller: null
+      verified: false
+    "CAR":
+      head_coach: steve-wilks
+      oc: null
+      dc: phil-snow
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+      note: "mid-season change: Steve Wilks 12g (recorded); also Matt Rhule 5g"
+    "CHI":
+      head_coach: matt-eberflus
+      oc: luke-getsy
+      dc: null
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "CIN":
+      head_coach: zac-taylor
+      oc: brian-callahan
+      dc: lou-anarumo
+      offensive_play_caller: zac-taylor
+      defensive_play_caller: null
+      verified: false
+    "CLE":
+      head_coach: kevin-stefanski
+      oc: alex-van-pelt
+      dc: joe-woods
+      offensive_play_caller: kevin-stefanski
+      defensive_play_caller: null
+      verified: false
+    "DAL":
+      head_coach: mike-mccarthy
+      oc: kellen-moore
+      dc: dan-quinn
+      offensive_play_caller: kellen-moore
+      defensive_play_caller: null
+      verified: false
+    "DEN":
+      head_coach: nathaniel-hackett
+      oc: justin-outten
+      dc: ejiro-evero
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+      note: "mid-season change: Nathaniel Hackett 15g (recorded); also Jay Rosburg 2g"
+    "DET":
+      head_coach: dan-campbell
+      oc: ben-johnson
+      dc: aaron-glenn
+      offensive_play_caller: ben-johnson
+      defensive_play_caller: null
+      verified: false
+    "GB":
+      head_coach: matt-lafleur
+      oc: adam-stenavich
+      dc: joe-barry
+      offensive_play_caller: matt-lafleur
+      defensive_play_caller: null
+      verified: false
+    "HOU":
+      head_coach: lovie-smith
+      oc: pep-hamilton
+      dc: lovie-smith
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "IND":
+      head_coach: frank-reich
+      oc: marcus-brady
+      dc: gus-bradley
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+      note: "mid-season change: Frank Reich 9g (recorded); also Jeff Saturday 8g"
+    "JAX":
+      head_coach: doug-pederson
+      oc: press-taylor
+      dc: mike-caldwell
+      offensive_play_caller: doug-pederson
+      defensive_play_caller: null
+      verified: false
+    "KC":
+      head_coach: andy-reid
+      oc: eric-bieniemy
+      dc: steve-spagnuolo
+      offensive_play_caller: andy-reid
+      defensive_play_caller: steve-spagnuolo
+      verified: false
+    "LA":
+      head_coach: sean-mcvay
+      oc: liam-coen
+      dc: raheem-morris
+      offensive_play_caller: sean-mcvay
+      defensive_play_caller: null
+      verified: false
+    "LAC":
+      head_coach: brandon-staley
+      oc: joe-lombardi
+      dc: null
+      offensive_play_caller: joe-lombardi
+      defensive_play_caller: brandon-staley
+      verified: false
+    "LV":
+      head_coach: josh-mcdaniels
+      oc: mick-lombardi
+      dc: patrick-graham
+      offensive_play_caller: josh-mcdaniels
+      defensive_play_caller: null
+      verified: false
+    "MIA":
+      head_coach: mike-mcdaniel
+      oc: frank-smith
+      dc: josh-boyer
+      offensive_play_caller: mike-mcdaniel
+      defensive_play_caller: null
+      verified: false
+    "MIN":
+      head_coach: kevin-o-connell
+      oc: wes-phillips
+      dc: ed-donatell
+      offensive_play_caller: kevin-o-connell
+      defensive_play_caller: null
+      verified: false
+    "NE":
+      head_coach: bill-belichick
+      oc: null
+      dc: steve-belichick
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "NO":
+      head_coach: dennis-allen
+      oc: pete-carmichael
+      dc: null
+      offensive_play_caller: pete-carmichael
+      defensive_play_caller: null
+      verified: false
+    "NYG":
+      head_coach: brian-daboll
+      oc: mike-kafka
+      dc: don-martindale
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "NYJ":
+      head_coach: robert-saleh
+      oc: mike-lafleur
+      dc: jeff-ulbrich
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "PHI":
+      head_coach: nick-sirianni
+      oc: shane-steichen
+      dc: jonathan-gannon
+      offensive_play_caller: shane-steichen
+      defensive_play_caller: null
+      verified: false
+    "PIT":
+      head_coach: mike-tomlin
+      oc: matt-canada
+      dc: teryl-austin
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "SEA":
+      head_coach: pete-carroll
+      oc: shane-waldron
+      dc: clint-hurtt
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "SF":
+      head_coach: kyle-shanahan
+      oc: null
+      dc: demeco-ryans
+      offensive_play_caller: kyle-shanahan
+      defensive_play_caller: null
+      verified: false
+    "TB":
+      head_coach: todd-bowles
+      oc: byron-leftwich
+      dc: null
+      offensive_play_caller: byron-leftwich
+      defensive_play_caller: todd-bowles
+      verified: false
+    "TEN":
+      head_coach: mike-vrabel
+      oc: todd-downing
+      dc: shane-bowen
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "WAS":
+      head_coach: ron-rivera
+      oc: scott-turner
+      dc: jack-del-rio
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+  2023:
+    "ARI":
+      head_coach: jonathan-gannon
+      oc: drew-petzing
+      dc: nick-rallis
+      offensive_play_caller: drew-petzing
+      defensive_play_caller: null
+      verified: false
+    "ATL":
+      head_coach: arthur-smith
+      oc: dave-ragone
+      dc: ryan-nielsen
+      offensive_play_caller: arthur-smith
+      defensive_play_caller: null
+      verified: false
+    "BAL":
+      head_coach: john-harbaugh
+      oc: todd-monken
+      dc: mike-macdonald
+      offensive_play_caller: todd-monken
+      defensive_play_caller: null
+      verified: false
+    "BUF":
+      head_coach: sean-mcdermott
+      oc: ken-dorsey
+      dc: null
+      offensive_play_caller: ken-dorsey
+      defensive_play_caller: sean-mcdermott
+      verified: false
+    "CAR":
+      head_coach: frank-reich
+      oc: thomas-brown
+      dc: ejiro-evero
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+      note: "mid-season change: Frank Reich 11g (recorded); also Chris Tabor 6g"
+    "CHI":
+      head_coach: matt-eberflus
+      oc: luke-getsy
+      dc: null
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "CIN":
+      head_coach: zac-taylor
+      oc: brian-callahan
+      dc: lou-anarumo
+      offensive_play_caller: zac-taylor
+      defensive_play_caller: null
+      verified: false
+    "CLE":
+      head_coach: kevin-stefanski
+      oc: alex-van-pelt
+      dc: jim-schwartz
+      offensive_play_caller: kevin-stefanski
+      defensive_play_caller: null
+      verified: false
+    "DAL":
+      head_coach: mike-mccarthy
+      oc: brian-schottenheimer
+      dc: dan-quinn
+      offensive_play_caller: mike-mccarthy
+      defensive_play_caller: null
+      verified: false
+    "DEN":
+      head_coach: sean-payton
+      oc: null
+      dc: vance-joseph
+      offensive_play_caller: sean-payton
+      defensive_play_caller: null
+      verified: false
+    "DET":
+      head_coach: dan-campbell
+      oc: ben-johnson
+      dc: aaron-glenn
+      offensive_play_caller: ben-johnson
+      defensive_play_caller: null
+      verified: false
+    "GB":
+      head_coach: matt-lafleur
+      oc: adam-stenavich
+      dc: joe-barry
+      offensive_play_caller: matt-lafleur
+      defensive_play_caller: null
+      verified: false
+    "HOU":
+      head_coach: demeco-ryans
+      oc: bobby-slowik
+      dc: matt-burke
+      offensive_play_caller: bobby-slowik
+      defensive_play_caller: null
+      verified: false
+    "IND":
+      head_coach: shane-steichen
+      oc: jim-bob-cooter
+      dc: gus-bradley
+      offensive_play_caller: shane-steichen
+      defensive_play_caller: null
+      verified: false
+    "JAX":
+      head_coach: doug-pederson
+      oc: press-taylor
+      dc: mike-caldwell
+      offensive_play_caller: doug-pederson
+      defensive_play_caller: null
+      verified: false
+    "KC":
+      head_coach: andy-reid
+      oc: matt-nagy
+      dc: steve-spagnuolo
+      offensive_play_caller: andy-reid
+      defensive_play_caller: steve-spagnuolo
+      verified: false
+    "LA":
+      head_coach: sean-mcvay
+      oc: mike-lafleur
+      dc: raheem-morris
+      offensive_play_caller: sean-mcvay
+      defensive_play_caller: null
+      verified: false
+    "LAC":
+      head_coach: brandon-staley
+      oc: kellen-moore
+      dc: null
+      offensive_play_caller: kellen-moore
+      defensive_play_caller: brandon-staley
+      verified: false
+      note: "mid-season change: Brandon Staley 14g (recorded); also Giff Smith 3g"
+    "LV":
+      head_coach: antonio-pierce
+      oc: mick-lombardi
+      dc: patrick-graham
+      offensive_play_caller: antonio-pierce
+      defensive_play_caller: null
+      verified: false
+      note: "mid-season change: Antonio Pierce 9g (recorded); also Josh McDaniels 8g"
+    "MIA":
+      head_coach: mike-mcdaniel
+      oc: frank-smith
+      dc: vic-fangio
+      offensive_play_caller: mike-mcdaniel
+      defensive_play_caller: null
+      verified: false
+    "MIN":
+      head_coach: kevin-o-connell
+      oc: wes-phillips
+      dc: brian-flores
+      offensive_play_caller: kevin-o-connell
+      defensive_play_caller: null
+      verified: false
+    "NE":
+      head_coach: bill-belichick
+      oc: bill-o-brien
+      dc: steve-belichick
+      offensive_play_caller: bill-o-brien
+      defensive_play_caller: null
+      verified: false
+    "NO":
+      head_coach: dennis-allen
+      oc: pete-carmichael
+      dc: null
+      offensive_play_caller: pete-carmichael
+      defensive_play_caller: null
+      verified: false
+    "NYG":
+      head_coach: brian-daboll
+      oc: mike-kafka
+      dc: don-martindale
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "NYJ":
+      head_coach: robert-saleh
+      oc: nathaniel-hackett
+      dc: jeff-ulbrich
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "PHI":
+      head_coach: nick-sirianni
+      oc: brian-johnson
+      dc: sean-desai
+      offensive_play_caller: brian-johnson
+      defensive_play_caller: null
+      verified: false
+    "PIT":
+      head_coach: mike-tomlin
+      oc: matt-canada
+      dc: teryl-austin
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "SEA":
+      head_coach: pete-carroll
+      oc: shane-waldron
+      dc: clint-hurtt
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "SF":
+      head_coach: kyle-shanahan
+      oc: null
+      dc: steve-wilks
+      offensive_play_caller: kyle-shanahan
+      defensive_play_caller: null
+      verified: false
+    "TB":
+      head_coach: todd-bowles
+      oc: dave-canales
+      dc: null
+      offensive_play_caller: dave-canales
+      defensive_play_caller: todd-bowles
+      verified: false
+    "TEN":
+      head_coach: mike-vrabel
+      oc: tim-kelly
+      dc: shane-bowen
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "WAS":
+      head_coach: ron-rivera
+      oc: eric-bieniemy
+      dc: jack-del-rio
+      offensive_play_caller: eric-bieniemy
+      defensive_play_caller: null
+      verified: false
+  2024:
+    "ARI":
+      head_coach: jonathan-gannon
+      oc: drew-petzing
+      dc: nick-rallis
+      offensive_play_caller: drew-petzing
+      defensive_play_caller: null
+      verified: false
+    "ATL":
+      head_coach: raheem-morris
+      oc: zac-robinson
+      dc: jimmy-lake
+      offensive_play_caller: zac-robinson
+      defensive_play_caller: null
+      verified: false
+    "BAL":
+      head_coach: john-harbaugh
+      oc: todd-monken
+      dc: zach-orr
+      offensive_play_caller: todd-monken
+      defensive_play_caller: null
+      verified: false
+    "BUF":
+      head_coach: sean-mcdermott
+      oc: joe-brady
+      dc: bobby-babich
+      offensive_play_caller: joe-brady
+      defensive_play_caller: null
+      verified: false
+    "CAR":
+      head_coach: dave-canales
+      oc: brad-idzik
+      dc: ejiro-evero
+      offensive_play_caller: dave-canales
+      defensive_play_caller: null
+      verified: false
+    "CHI":
+      head_coach: matt-eberflus
+      oc: null
+      dc: eric-washington
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "CIN":
+      head_coach: zac-taylor
+      oc: dan-pitcher
+      dc: lou-anarumo
+      offensive_play_caller: zac-taylor
+      defensive_play_caller: null
+      verified: false
+    "CLE":
+      head_coach: kevin-stefanski
+      oc: ken-dorsey
+      dc: jim-schwartz
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "DAL":
+      head_coach: mike-mccarthy
+      oc: brian-schottenheimer
+      dc: mike-zimmer
+      offensive_play_caller: mike-mccarthy
+      defensive_play_caller: null
+      verified: false
+    "DEN":
+      head_coach: sean-payton
+      oc: null
+      dc: vance-joseph
+      offensive_play_caller: sean-payton
+      defensive_play_caller: null
+      verified: false
+    "DET":
+      head_coach: dan-campbell
+      oc: ben-johnson
+      dc: aaron-glenn
+      offensive_play_caller: ben-johnson
+      defensive_play_caller: null
+      verified: false
+    "GB":
+      head_coach: matt-lafleur
+      oc: adam-stenavich
+      dc: jeff-hafley
+      offensive_play_caller: matt-lafleur
+      defensive_play_caller: null
+      verified: false
+    "HOU":
+      head_coach: demeco-ryans
+      oc: bobby-slowik
+      dc: matt-burke
+      offensive_play_caller: bobby-slowik
+      defensive_play_caller: null
+      verified: false
+    "IND":
+      head_coach: shane-steichen
+      oc: jim-bob-cooter
+      dc: gus-bradley
+      offensive_play_caller: shane-steichen
+      defensive_play_caller: null
+      verified: false
+    "JAX":
+      head_coach: doug-pederson
+      oc: press-taylor
+      dc: ryan-nielsen
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "KC":
+      head_coach: andy-reid
+      oc: matt-nagy
+      dc: steve-spagnuolo
+      offensive_play_caller: andy-reid
+      defensive_play_caller: steve-spagnuolo
+      verified: false
+    "LA":
+      head_coach: sean-mcvay
+      oc: mike-lafleur
+      dc: chris-shula
+      offensive_play_caller: sean-mcvay
+      defensive_play_caller: null
+      verified: false
+    "LAC":
+      head_coach: jim-harbaugh
+      oc: greg-roman
+      dc: jesse-minter
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "LV":
+      head_coach: antonio-pierce
+      oc: null
+      dc: patrick-graham
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "MIA":
+      head_coach: mike-mcdaniel
+      oc: frank-smith
+      dc: anthony-weaver
+      offensive_play_caller: mike-mcdaniel
+      defensive_play_caller: null
+      verified: false
+    "MIN":
+      head_coach: kevin-o-connell
+      oc: wes-phillips
+      dc: brian-flores
+      offensive_play_caller: kevin-o-connell
+      defensive_play_caller: null
+      verified: false
+    "NE":
+      head_coach: jerod-mayo
+      oc: alex-van-pelt
+      dc: demarcus-covington
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "NO":
+      head_coach: dennis-allen
+      oc: null
+      dc: null
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "NYG":
+      head_coach: brian-daboll
+      oc: mike-kafka
+      dc: shane-bowen
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "NYJ":
+      head_coach: robert-saleh
+      oc: nathaniel-hackett
+      dc: jeff-ulbrich
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "PHI":
+      head_coach: nick-sirianni
+      oc: kellen-moore
+      dc: vic-fangio
+      offensive_play_caller: kellen-moore
+      defensive_play_caller: null
+      verified: false
+    "PIT":
+      head_coach: mike-tomlin
+      oc: arthur-smith
+      dc: teryl-austin
+      offensive_play_caller: arthur-smith
+      defensive_play_caller: null
+      verified: false
+    "SEA":
+      head_coach: mike-macdonald
+      oc: ryan-grubb
+      dc: null
+      offensive_play_caller: null
+      defensive_play_caller: mike-macdonald
+      verified: false
+    "SF":
+      head_coach: kyle-shanahan
+      oc: null
+      dc: nick-sorensen
+      offensive_play_caller: kyle-shanahan
+      defensive_play_caller: null
+      verified: false
+    "TB":
+      head_coach: todd-bowles
+      oc: liam-coen
+      dc: null
+      offensive_play_caller: liam-coen
+      defensive_play_caller: todd-bowles
+      verified: false
+    "TEN":
+      head_coach: brian-callahan
+      oc: nick-holz
+      dc: dennis-allen
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "WAS":
+      head_coach: dan-quinn
+      oc: kliff-kingsbury
+      dc: joe-whitt-jr
+      offensive_play_caller: kliff-kingsbury
+      defensive_play_caller: null
+      verified: false
+  2025:
+    "ARI":
+      head_coach: jonathan-gannon
+      oc: drew-petzing
+      dc: nick-rallis
+      offensive_play_caller: drew-petzing
+      defensive_play_caller: null
+      verified: false
+    "ATL":
+      head_coach: raheem-morris
+      oc: zac-robinson
+      dc: jimmy-lake
+      offensive_play_caller: zac-robinson
+      defensive_play_caller: null
+      verified: false
+    "BAL":
+      head_coach: john-harbaugh
+      oc: todd-monken
+      dc: zach-orr
+      offensive_play_caller: todd-monken
+      defensive_play_caller: null
+      verified: false
+    "BUF":
+      head_coach: sean-mcdermott
+      oc: joe-brady
+      dc: bobby-babich
+      offensive_play_caller: joe-brady
+      defensive_play_caller: null
+      verified: false
+    "CAR":
+      head_coach: dave-canales
+      oc: brad-idzik
+      dc: ejiro-evero
+      offensive_play_caller: dave-canales
+      defensive_play_caller: null
+      verified: false
+    "CHI":
+      head_coach: ben-johnson
+      oc: null
+      dc: dennis-allen
+      offensive_play_caller: ben-johnson
+      defensive_play_caller: null
+      verified: false
+    "CIN":
+      head_coach: zac-taylor
+      oc: dan-pitcher
+      dc: al-golden
+      offensive_play_caller: zac-taylor
+      defensive_play_caller: null
+      verified: false
+    "CLE":
+      head_coach: kevin-stefanski
+      oc: ken-dorsey
+      dc: jim-schwartz
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "DAL":
+      head_coach: brian-schottenheimer
+      oc: klayton-adams
+      dc: matt-eberflus
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "DEN":
+      head_coach: sean-payton
+      oc: null
+      dc: vance-joseph
+      offensive_play_caller: sean-payton
+      defensive_play_caller: null
+      verified: false
+    "DET":
+      head_coach: dan-campbell
+      oc: john-morton
+      dc: kelvin-sheppard
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "GB":
+      head_coach: matt-lafleur
+      oc: adam-stenavich
+      dc: jeff-hafley
+      offensive_play_caller: matt-lafleur
+      defensive_play_caller: null
+      verified: false
+    "HOU":
+      head_coach: demeco-ryans
+      oc: nick-caley
+      dc: matt-burke
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "IND":
+      head_coach: shane-steichen
+      oc: jim-bob-cooter
+      dc: lou-anarumo
+      offensive_play_caller: shane-steichen
+      defensive_play_caller: null
+      verified: false
+    "JAX":
+      head_coach: liam-coen
+      oc: null
+      dc: anthony-campanile
+      offensive_play_caller: liam-coen
+      defensive_play_caller: null
+      verified: false
+    "KC":
+      head_coach: andy-reid
+      oc: matt-nagy
+      dc: steve-spagnuolo
+      offensive_play_caller: andy-reid
+      defensive_play_caller: steve-spagnuolo
+      verified: false
+    "LA":
+      head_coach: sean-mcvay
+      oc: mike-lafleur
+      dc: chris-shula
+      offensive_play_caller: sean-mcvay
+      defensive_play_caller: null
+      verified: false
+    "LAC":
+      head_coach: jim-harbaugh
+      oc: null
+      dc: jesse-minter
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "LV":
+      head_coach: pete-carroll
+      oc: chip-kelly
+      dc: patrick-graham
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "MIA":
+      head_coach: mike-mcdaniel
+      oc: frank-smith
+      dc: anthony-weaver
+      offensive_play_caller: mike-mcdaniel
+      defensive_play_caller: null
+      verified: false
+    "MIN":
+      head_coach: kevin-o-connell
+      oc: wes-phillips
+      dc: brian-flores
+      offensive_play_caller: kevin-o-connell
+      defensive_play_caller: null
+      verified: false
+    "NE":
+      head_coach: mike-vrabel
+      oc: josh-mcdaniels
+      dc: terrell-williams
+      offensive_play_caller: josh-mcdaniels
+      defensive_play_caller: null
+      verified: false
+    "NO":
+      head_coach: kellen-moore
+      oc: null
+      dc: brandon-staley
+      offensive_play_caller: kellen-moore
+      defensive_play_caller: null
+      verified: false
+    "NYG":
+      head_coach: brian-daboll
+      oc: mike-kafka
+      dc: shane-bowen
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "NYJ":
+      head_coach: aaron-glenn
+      oc: tanner-engstrand
+      dc: steve-wilks
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "PHI":
+      head_coach: nick-sirianni
+      oc: kevin-patullo
+      dc: vic-fangio
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "PIT":
+      head_coach: mike-tomlin
+      oc: arthur-smith
+      dc: teryl-austin
+      offensive_play_caller: arthur-smith
+      defensive_play_caller: null
+      verified: false
+    "SEA":
+      head_coach: mike-macdonald
+      oc: klint-kubiak
+      dc: null
+      offensive_play_caller: null
+      defensive_play_caller: mike-macdonald
+      verified: false
+    "SF":
+      head_coach: kyle-shanahan
+      oc: null
+      dc: robert-saleh
+      offensive_play_caller: kyle-shanahan
+      defensive_play_caller: null
+      verified: false
+    "TB":
+      head_coach: todd-bowles
+      oc: josh-grizzard
+      dc: null
+      offensive_play_caller: null
+      defensive_play_caller: todd-bowles
+      verified: false
+    "TEN":
+      head_coach: brian-callahan
+      oc: nick-holz
+      dc: dennis-allen
+      offensive_play_caller: null
+      defensive_play_caller: null
+      verified: false
+    "WAS":
+      head_coach: dan-quinn
+      oc: kliff-kingsbury
+      dc: joe-whitt-jr
+      offensive_play_caller: kliff-kingsbury
+      defensive_play_caller: null
+      verified: false
+
+# slug -> display name for every coach referenced above.
+names:
+  aaron-glenn: Aaron Glenn
+  adam-stenavich: Adam Stenavich
+  al-golden: Al Golden
+  alex-van-pelt: Alex Van Pelt
+  andy-reid: Andy Reid
+  anthony-campanile: Anthony Campanile
+  anthony-lynn: Anthony Lynn
+  anthony-weaver: Anthony Weaver
+  antonio-pierce: Antonio Pierce
+  arthur-smith: Arthur Smith
+  ben-johnson: Ben Johnson
+  bill-belichick: Bill Belichick
+  bill-lazor: Bill Lazor
+  bill-o-brien: Bill O'Brien
+  bobby-babich: Bobby Babich
+  bobby-slowik: Bobby Slowik
+  brad-idzik: Brad Idzik
+  brandon-staley: Brandon Staley
+  brian-callahan: Brian Callahan
+  brian-daboll: Brian Daboll
+  brian-flores: Brian Flores
+  brian-johnson: Brian Johnson
+  brian-schottenheimer: Brian Schottenheimer
+  bruce-arians: Bruce Arians
+  byron-leftwich: Byron Leftwich
+  chip-kelly: Chip Kelly
+  chris-shula: Chris Shula
+  clint-hurtt: Clint Hurtt
+  dan-campbell: Dan Campbell
+  dan-pitcher: Dan Pitcher
+  dan-quinn: Dan Quinn
+  dave-canales: Dave Canales
+  dave-ragone: Dave Ragone
+  david-culley: David Culley
+  demarcus-covington: DeMarcus Covington
+  demeco-ryans: DeMeco Ryans
+  dean-pees: Dean Pees
+  dennis-allen: Dennis Allen
+  don-martindale: Don Martindale
+  doug-pederson: Doug Pederson
+  drew-petzing: Drew Petzing
+  ed-donatell: Ed Donatell
+  ejiro-evero: Ejiro Evero
+  eric-bieniemy: Eric Bieniemy
+  eric-washington: Eric Washington
+  frank-reich: Frank Reich
+  frank-smith: Frank Smith
+  greg-olson: Greg Olson
+  greg-roman: Greg Roman
+  gus-bradley: Gus Bradley
+  jack-del-rio: Jack Del Rio
+  jeff-hafley: Jeff Hafley
+  jeff-ulbrich: Jeff Ulbrich
+  jerod-mayo: Jerod Mayo
+  jesse-minter: Jesse Minter
+  jim-bob-cooter: Jim Bob Cooter
+  jim-harbaugh: Jim Harbaugh
+  jim-schwartz: Jim Schwartz
+  jimmy-lake: Jimmy Lake
+  joe-barry: Joe Barry
+  joe-brady: Joe Brady
+  joe-judge: Joe Judge
+  joe-lombardi: Joe Lombardi
+  joe-whitt-jr: Joe Whitt Jr.
+  joe-woods: Joe Woods
+  john-harbaugh: John Harbaugh
+  john-morton: John Morton
+  jonathan-gannon: Jonathan Gannon
+  josh-boyer: Josh Boyer
+  josh-grizzard: Josh Grizzard
+  josh-mcdaniels: Josh McDaniels
+  justin-outten: Justin Outten
+  kellen-moore: Kellen Moore
+  kelvin-sheppard: Kelvin Sheppard
+  ken-dorsey: Ken Dorsey
+  ken-norton-jr: Ken Norton Jr.
+  kevin-o-connell: Kevin O'Connell
+  kevin-patullo: Kevin Patullo
+  kevin-stefanski: Kevin Stefanski
+  klayton-adams: Klayton Adams
+  kliff-kingsbury: Kliff Kingsbury
+  klint-kubiak: Klint Kubiak
+  kyle-shanahan: Kyle Shanahan
+  leslie-frazier: Leslie Frazier
+  liam-coen: Liam Coen
+  lou-anarumo: Lou Anarumo
+  lovie-smith: Lovie Smith
+  luke-getsy: Luke Getsy
+  marcus-brady: Marcus Brady
+  matt-burke: Matt Burke
+  matt-canada: Matt Canada
+  matt-eberflus: Matt Eberflus
+  matt-lafleur: Matt LaFleur
+  matt-nagy: Matt Nagy
+  matt-rhule: Matt Rhule
+  mick-lombardi: Mick Lombardi
+  mike-caldwell: Mike Caldwell
+  mike-kafka: Mike Kafka
+  mike-lafleur: Mike LaFleur
+  mike-macdonald: Mike Macdonald
+  mike-mccarthy: Mike McCarthy
+  mike-mcdaniel: Mike McDaniel
+  mike-tomlin: Mike Tomlin
+  mike-vrabel: Mike Vrabel
+  mike-zimmer: Mike Zimmer
+  nathaniel-hackett: Nathaniel Hackett
+  nick-caley: Nick Caley
+  nick-holz: Nick Holz
+  nick-rallis: Nick Rallis
+  nick-sirianni: Nick Sirianni
+  nick-sorensen: Nick Sorensen
+  pat-shurmur: Pat Shurmur
+  patrick-graham: Patrick Graham
+  pep-hamilton: Pep Hamilton
+  pete-carmichael: Pete Carmichael
+  pete-carroll: Pete Carroll
+  phil-snow: Phil Snow
+  press-taylor: Press Taylor
+  raheem-morris: Raheem Morris
+  rich-bisaccia: Rich Bisaccia
+  robert-saleh: Robert Saleh
+  ron-rivera: Ron Rivera
+  ryan-grubb: Ryan Grubb
+  ryan-nielsen: Ryan Nielsen
+  scott-turner: Scott Turner
+  sean-desai: Sean Desai
+  sean-mcdermott: Sean McDermott
+  sean-mcvay: Sean McVay
+  sean-payton: Sean Payton
+  shane-bowen: Shane Bowen
+  shane-steichen: Shane Steichen
+  shane-waldron: Shane Waldron
+  steve-belichick: Steve Belichick
+  steve-spagnuolo: Steve Spagnuolo
+  steve-wilks: Steve Wilks
+  tanner-engstrand: Tanner Engstrand
+  terrell-williams: Terrell Williams
+  teryl-austin: Teryl Austin
+  thomas-brown: Thomas Brown
+  tim-kelly: Tim Kelly
+  todd-bowles: Todd Bowles
+  todd-downing: Todd Downing
+  todd-monken: Todd Monken
+  urban-meyer: Urban Meyer
+  vance-joseph: Vance Joseph
+  vic-fangio: Vic Fangio
+  wes-phillips: Wes Phillips
+  zac-robinson: Zac Robinson
+  zac-taylor: Zac Taylor
+  zach-orr: Zach Orr
