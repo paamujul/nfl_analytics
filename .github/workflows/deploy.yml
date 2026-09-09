@@ -4,17 +4,42 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: >-
+          Image tag to deploy (a commit SHA). Leave blank to build and deploy
+          this ref. Set it to an older SHA to roll back: that image is already
+          in Artifact Registry, so the build and migration steps are skipped
+          and the VM simply pulls the older image.
+        required: false
+        type: string
 
 # Workload Identity Federation instead of a long-lived service-account key.
 permissions:
   contents: read
   id-token: write
 
+# The deploy service account (secrets.GCP_DEPLOY_SA) needs, beyond the
+# Artifact Registry and Cloud Run roles it already had:
+#
+#   roles/iap.tunnelResourceAccessor  -- open the IAP TCP tunnel to the VM
+#   roles/compute.osAdminLogin        -- SSH *with sudo*; plain roles/
+#                                        compute.osLogin cannot run systemctl,
+#                                        so nfl-deploy fails on a bare osLogin
+#   roles/compute.viewer              -- `gcloud compute ssh` calls
+#                                        compute.instances.get before it dials
+#   roles/secretmanager.secretAccessor on the nfl-database-url secret -- new,
+#                                        for the migration step below
+#
+# None of this is visible from the workflow file otherwise, and a missing role
+# here is the most likely first-run failure.
+
 env:
   REGION: ${{ vars.GCP_REGION }}
   REPO: ${{ vars.ARTIFACT_REPO }}
-  SERVICE: nfl-analytics-api
-  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/${{ vars.ARTIFACT_REPO }}/nfl-analytics:${{ github.sha }}
+  ZONE: us-east1-b
+  VM: nfl-analytics
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/${{ vars.ARTIFACT_REPO }}/nfl-analytics:${{ inputs.image_tag || github.sha }}
 
 jobs:
   deploy:
@@ -28,41 +53,59 @@ jobs:
           service_account: ${{ secrets.GCP_DEPLOY_SA }}
       - uses: google-github-actions/setup-gcloud@v2
 
+      # Context is the repo root, not backend/ -- the image now contains the
+      # built SPA as well as the API. See backend/Dockerfile.
+      #
+      # Skipped on a rollback dispatch. checkout@v4 gives us the *current* ref
+      # regardless of image_tag, so building here would compile today's source
+      # and push it under the old SHA's tag: the rollback would silently
+      # redeploy the code it was meant to back out of, and the registry tag
+      # would stop matching its commit. The old image already exists; just pull.
       - name: Build and push
+        if: ${{ !inputs.image_tag }}
         run: |
           gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
-          docker build -t "$IMAGE" backend
+          docker build -f backend/Dockerfile -t "$IMAGE" .
           docker push "$IMAGE"
 
-      # Migrations run before the new image serves traffic, against the session
-      # pooler (5432) -- the transaction pooler (6543) cannot run DDL, and the
-      # direct db.<ref> endpoint is IPv6-only.
+      # Migrations run before the new image serves traffic. The nfl-database-url
+      # secret now points at the session pooler (5432) rather than the
+      # transaction pooler (6543), so one connection string serves both
+      # migrations and runtime -- the transaction pooler could not run DDL,
+      # which is why this used to need a second DATABASE_URL_SESSION secret.
+      # That secret is now redundant.
+      #
+      # Also skipped on rollback: the old image's alembic knows nothing about
+      # revisions added since, so `upgrade head` against an already-newer DB
+      # dies with "Can't locate revision". Rolling code back does not roll the
+      # schema back -- migrations are expected to stay forward-compatible.
       - name: Run migrations
+        if: ${{ !inputs.image_tag }}
         run: |
-          docker run --rm -e DATABASE_URL="${{ secrets.DATABASE_URL_SESSION }}" \
-            "$IMAGE" alembic upgrade head
+          DB="$(gcloud secrets versions access latest --secret=nfl-database-url)"
+          docker run --rm -e DATABASE_URL="$DB" "$IMAGE" alembic upgrade head
 
-      - name: Deploy API
+      # nfl-deploy lives on the VM (see deploy/): it pulls the image, restarts
+      # the systemd unit, health-checks it, and rolls back to the previous
+      # image if the health check fails. Reached over IAP, so the VM needs no
+      # public IP and no port 22 open to the internet.
+      - name: Deploy to VM
         run: |
-          gcloud run deploy "$SERVICE" \
-            --image "$IMAGE" --region "$REGION" \
-            --memory 512Mi --cpu 1 --concurrency 80 \
-            --min-instances 0 --max-instances 3 --timeout 60s \
-            --set-env-vars DISABLE_INGEST=1,AUTO_SEED=0,ALLOWED_ORIGINS=${{ vars.FRONTEND_ORIGIN }} \
-            --set-secrets DATABASE_URL=nfl-database-url:latest \
-            --allow-unauthenticated
+          gcloud compute ssh "$VM" --zone "$ZONE" --tunnel-through-iap --quiet \
+            --command "sudo /usr/local/bin/nfl-deploy $IMAGE"
 
+      # The poll job is gone: the VM runs the poller in-process on a 45s
+      # cadence. The nflverse refresh stays on Cloud Run because it loads season
+      # parquet and needs 2 GiB, which the VM does not have.
+      #
+      # DB_POOL_SIZE=1 because it is a single-threaded batch job -- at the
+      # default of 5 it would reserve a third of the ~15 connection slots the
+      # session pooler allows, starving the VM.
       - name: Update scheduled jobs
         run: |
-          # poll exits in seconds when nothing is live; the nflverse refresh
-          # loads season parquet and needs real memory (1 GB gets OOM-killed)
-          gcloud run jobs update nfl-analytics-poll \
-            --image "$IMAGE" --region "$REGION" \
-            --memory 512Mi --task-timeout 300s --max-retries 1 \
-            --command python --args=-m,app.cli,poll-once \
-            --set-secrets DATABASE_URL=nfl-database-url:latest
           gcloud run jobs update nfl-analytics-nflverse-refresh \
             --image "$IMAGE" --region "$REGION" \
             --memory 2Gi --task-timeout 1800s --max-retries 1 \
             --command python --args=-m,app.cli,refresh-nflverse,2026 \
+            --set-env-vars DB_POOL_SIZE=1 \
             --set-secrets DATABASE_URL=nfl-database-url:latest
