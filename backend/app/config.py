@@ -25,9 +25,16 @@ for _prefix in ("postgres://", "postgresql://"):
         DATABASE_URL = "postgresql+psycopg://" + DATABASE_URL[len(_prefix):]
         break
 
-# Seasons the app knows about. 2025 is the validation season (nflverse),
-# 2026 is the live season (ESPN preseason now, nflverse once reg season data lands).
-SEASONS = [2025, 2026]
+# Seasons the app knows about. 2026 is the live season (ESPN preseason now,
+# nflverse once regular-season data lands); 2021-2025 are complete and are the
+# training window for the coaching/play-calling work -- five seasons is the
+# shortest span that covers a coordinator's tenure on most staffs.
+#
+# 2021 is the floor on purpose: FTN charting starts in 2022, and participation's
+# pressure/coverage/route columns are only ~39% filled in 2021-22 versus ~100%
+# from 2023. Going further back adds rows with almost none of the columns the
+# coaching feature is built on.
+SEASONS = [2021, 2022, 2023, 2024, 2025, 2026]
 
 # Phase identifiers used across the app. ESPN "seasontype": 1=pre, 2=reg, 3=post.
 PHASES = {"pre": 1, "reg": 2, "post": 3}
@@ -63,5 +70,9 @@ ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").spli
 # On first boot with an empty database, seed it in the background so a fresh
 # deploy becomes useful without any manual backfill step.
 AUTO_SEED = os.environ.get("AUTO_SEED", "1") != "0"
-SEED_SEASONS = (2025, 2026)
+# NB: seeding all six seasons needs roughly 4 GiB of working memory for the
+# parquet downloads and lands 350-450 MB in the database. That belongs in a
+# Cloud Run Job, not in a web process's background task -- see
+# check_storage_budget(), which warns before Supabase's 500 MB read-only cap.
+SEED_SEASONS = (2021, 2022, 2023, 2024, 2025, 2026)
 

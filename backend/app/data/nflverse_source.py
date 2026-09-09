@@ -16,11 +16,11 @@ os.environ.setdefault("NFLREADPY_CACHE_DIR", str(CACHE_DIR))
 
 import nflreadpy  # noqa: E402  (env vars must be set before import)
 import polars as pl  # noqa: E402
-from sqlalchemy import delete  # noqa: E402
+from sqlalchemy import delete, text  # noqa: E402
 
 from app.db.models import (  # noqa: E402
-    Coach, CoachingStaff, Game, Play, Player, PlayerGameStat, SnapCount,
-    SyncLog, Team,
+    Coach, CoachingStaff, DepthChartEntry, Game, Play, Player, PlayerGameStat,
+    PlayerSeasonAdvanced, SnapCount, SyncLog, Team,
 )
 from app.db.session import db_session  # noqa: E402
 from app.db.upsert import upsert_all  # noqa: E402
@@ -431,6 +431,159 @@ def sync_coaching_staff(season: int) -> int:
     return n
 
 
+def sync_depth_charts(season: int) -> int:
+    """Weekly depth charts -> depth_chart.
+
+    Two incompatible upstream shapes, and the split is not documented anywhere:
+
+      2021-2024  per-week charts: season, club_code, week, game_type,
+                 depth_team (1=starter), formation, depth_position, gsis_id
+      2025+      dated roster snapshots: dt, team, pos_abb, pos_rank, gsis_id
+                 -- no week, no game_type, no formation, and 554k rows because
+                 every daily snapshot is included.
+
+    For the snapshot shape only the most recent `dt` is kept (~2.3k rows) and
+    stored as week=0, meaning "latest known, not tied to a game week". Loading
+    all 221 snapshots would inflate the table ~240x for data that barely moves.
+    Callers wanting a week-specific chart must check for week>0.
+    """
+    try:
+        df = nflreadpy.load_depth_charts([season])
+    except Exception as e:
+        with db_session() as s:
+            _log(s, f"depth_charts {season}", "error", message=str(e)[:300])
+        return 0
+
+    cols = set(df.columns)
+    rows: list[dict] = []
+
+    if "depth_position" in cols:  # 2021-2024 shape
+        for r in df.to_dicts():
+            pid = r.get("gsis_id")
+            if not pid:
+                continue  # unsigned/practice-squad bodies with no gsis id
+            rows.append({
+                "season": r.get("season") or season,
+                # week is null on a couple hundred rows a season and is part of
+                # the primary key; Postgres will not accept a NULL there.
+                "week": _int(r.get("week")) or 0,
+                "game_type": r.get("game_type") or "REG",
+                "team": r.get("club_code"),
+                "formation": r.get("formation") or "?",
+                "depth_position": r.get("depth_position"),
+                "player_id": pid,
+                "depth_team": _int(r.get("depth_team")),
+                "position": r.get("position"),
+                "player_name": r.get("full_name"),
+            })
+        shape = "weekly"
+    else:  # 2025+ snapshot shape
+        latest = df["dt"].max()
+        snap = df.filter(pl.col("dt") == latest)
+        for r in snap.to_dicts():
+            pid = r.get("gsis_id")
+            if not pid:
+                continue
+            rows.append({
+                "season": season, "week": 0, "game_type": "REG",
+                "team": r.get("team"),
+                "formation": r.get("pos_grp") or "?",
+                "depth_position": r.get("pos_abb"),
+                "player_id": pid,
+                "depth_team": _int(r.get("pos_rank")),
+                "position": r.get("pos_abb"),
+                "player_name": r.get("player_name"),
+            })
+        shape = f"snapshot@{latest}"
+
+    with db_session() as s:
+        n = upsert_all(s, DepthChartEntry, rows)
+        _log(s, f"depth_charts {season}", "ok", message=shape, rows=n)
+    return n
+
+
+def sync_pfr_advstats(season: int) -> int:
+    """PFR advanced defensive stats -> player_season_advanced.
+
+    Upstream keys on `pfr_id`, which joins to nothing else in this database, so
+    the pfr_id -> gsis_id mapping from load_players() is applied here and the
+    gsis id is stored in player_id. That mapping covered 926/926 rows for 2023,
+    so downstream joins onto `players` are safe; player_id is still nullable for
+    the occasional unmapped body.
+
+    A traded player appears more than once per season (a per-team row plus a
+    combined "2TM" row), which is why the season total row is preferred below --
+    otherwise upsert_all's last-write-wins would pick an arbitrary partial line.
+    """
+    try:
+        df = nflreadpy.load_pfr_advstats([season], stat_type="def", summary_level="season")
+    except Exception as e:
+        with db_session() as s:
+            _log(s, f"pfr_advstats {season}", "error", message=str(e)[:300])
+        return 0
+
+    pfr_to_gsis: dict[str, str] = {}
+    try:
+        players = nflreadpy.load_players()
+        if {"pfr_id", "gsis_id"} <= set(players.columns):
+            for r in players.select(["pfr_id", "gsis_id"]).drop_nulls().to_dicts():
+                pfr_to_gsis[r["pfr_id"]] = r["gsis_id"]
+    except Exception:
+        pass  # table is still usable via pfr_id; the join just won't resolve
+
+    num = ("prss", "hrry", "qbkd", "bltz", "sk", "tgt", "cmp_percent", "rat",
+           "dadot", "comb", "m_tkl_percent")
+    rows: list[dict] = []
+    for r in df.to_dicts():
+        pfr = r.get("pfr_id")
+        if not pfr:
+            continue
+        rows.append({
+            "season": r.get("season") or season, "pfr_id": pfr,
+            "player_id": pfr_to_gsis.get(pfr),
+            "player_name": r.get("player"), "team": r.get("tm"),
+            "position": r.get("pos"),
+            "games": _int(r.get("g")), "games_started": _int(r.get("gs")),
+            **{c: r.get(c) for c in num},
+        })
+    # most games played wins the (season, pfr_id) key -- the season-total row
+    rows.sort(key=lambda x: x["games"] or 0)
+
+    with db_session() as s:
+        n = upsert_all(s, PlayerSeasonAdvanced, rows)
+        unmapped = sum(1 for r in rows if not r["player_id"])
+        _log(s, f"pfr_advstats {season}", "ok",
+             message=f"unmapped pfr_id -> gsis: {unmapped}", rows=n)
+    return n
+
+
+def check_storage_budget(limit_mb: int = 400) -> int:
+    """Warn before Supabase's free tier turns the project read-only.
+
+    Five seasons of plays is an estimated 350-450 MB against a 500 MB cap, and
+    Supabase does not reject writes at the cap -- it flips the whole project to
+    read-only, which would look like ingestion silently doing nothing. Writing a
+    sync_log error at 400 MB gives some room to react.
+
+    No-op on SQLite, which has no equivalent limit and no pg_database_size.
+    """
+    from app.db.session import IS_SQLITE
+
+    if IS_SQLITE:
+        return 0
+    with db_session() as s:
+        mb = int(s.execute(
+            text("select pg_database_size(current_database())")).scalar_one() / 1_000_000)
+        if mb > limit_mb:
+            _log(s, "storage", "error",
+                 message=(f"database is {mb} MB, over the {limit_mb} MB guard. "
+                          "Supabase free tier turns the project READ-ONLY at "
+                          "500 MB, which stops ingestion silently."), rows=mb)
+        else:
+            _log(s, "storage", "ok", message=f"{mb} MB used", rows=mb)
+    return mb
+
+
 def sync_snap_counts(season: int) -> int:
     try:
         df = nflreadpy.load_snap_counts([season])
@@ -474,6 +627,13 @@ def backfill_season(season: int) -> dict[str, int]:
         # coaching_staff reads a checked-in file and cross-checks against
         # load_schedules; it needs no table of ours, hence no requires edge.
         ("coaching_staff", lambda: sync_coaching_staff(season), ()),
+        # depth_chart and player_season_advanced carry gsis ids but no declared
+        # FK onto players -- a depth chart lists bodies who never record a stat,
+        # so requiring player_stats would drop real rows for no integrity gain.
+        ("depth_charts", lambda: sync_depth_charts(season), ()),
+        ("pfr_advstats", lambda: sync_pfr_advstats(season), ()),
+        # Last: measures what the steps above just wrote.
+        ("storage", check_storage_budget, ()),
     ]
     out: dict[str, int] = {}
     failed: set[str] = set()

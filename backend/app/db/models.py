@@ -273,6 +273,76 @@ class CoachingStaff(Base):
     note: Mapped[str | None] = mapped_column(Text)  # e.g. mid-season HC change
 
 
+class DepthChartEntry(Base):
+    """Weekly depth chart -- who is listed where, and how deep.
+
+    Answers "who are this team's edge rushers / corners / safeties" and later
+    feeds roster-continuity weighting.
+
+    Two upstream shapes are folded into this one table (see sync_depth_charts):
+    2021-2024 publish a per-week, per-formation chart; 2025 publishes dated
+    roster snapshots with no week at all, which land here as week=0.
+    """
+    __tablename__ = "depth_chart"
+
+    season: Mapped[int] = mapped_column(Integer, primary_key=True)
+    week: Mapped[int] = mapped_column(Integer, primary_key=True)  # 0 = undated snapshot
+    game_type: Mapped[str] = mapped_column(String(8), primary_key=True, default="REG")
+    team: Mapped[str] = mapped_column(String(4), primary_key=True)
+    formation: Mapped[str] = mapped_column(String(16), primary_key=True)  # Offense|Defense|Special Teams
+    depth_position: Mapped[str] = mapped_column(String(8), primary_key=True)  # RG|LT|CB|...
+    player_id: Mapped[str] = mapped_column(String(24), primary_key=True)  # gsis id
+
+    depth_team: Mapped[int | None] = mapped_column(Integer)  # 1 = starter
+    position: Mapped[str | None] = mapped_column(String(8))
+    player_name: Mapped[str | None] = mapped_column(String(128))
+
+    __table_args__ = (
+        Index("ix_depth_chart_season_team", "season", "team"),
+        Index("ix_depth_chart_player", "player_id"),
+    )
+
+
+class PlayerSeasonAdvanced(Base):
+    """PFR advanced defensive stats, one row per player-season.
+
+    Upstream keys on `pfr_id`, not a gsis id, so it will not join to `players`
+    as shipped. sync_pfr_advstats resolves pfr_id -> gsis_id through
+    load_players() (which carries both) and stores the gsis id in `player_id`;
+    that mapping resolved 926/926 rows for 2023, so the join is safe to rely on.
+    `pfr_id` is kept alongside for traceability back to the source row, and
+    `player_id` is nullable for the rare unmapped player.
+    """
+    __tablename__ = "player_season_advanced"
+
+    season: Mapped[int] = mapped_column(Integer, primary_key=True)
+    pfr_id: Mapped[str] = mapped_column(String(16), primary_key=True)
+
+    player_id: Mapped[str | None] = mapped_column(String(24), index=True)  # gsis id
+    player_name: Mapped[str | None] = mapped_column(String(128))
+    team: Mapped[str | None] = mapped_column(String(4))  # "2TM" for mid-season trades
+    position: Mapped[str | None] = mapped_column(String(8))
+    games: Mapped[int | None] = mapped_column(Integer)
+    games_started: Mapped[int | None] = mapped_column(Integer)
+
+    # pass rush
+    prss: Mapped[float | None] = mapped_column(Float)  # pressures
+    hrry: Mapped[float | None] = mapped_column(Float)  # hurries
+    qbkd: Mapped[float | None] = mapped_column(Float)  # QB knockdowns
+    bltz: Mapped[float | None] = mapped_column(Float)  # times blitzed
+    sk: Mapped[float | None] = mapped_column(Float)    # sacks (halves)
+
+    # coverage
+    tgt: Mapped[float | None] = mapped_column(Float)
+    cmp_percent: Mapped[float | None] = mapped_column(Float)
+    rat: Mapped[float | None] = mapped_column(Float)   # passer rating when targeted
+    dadot: Mapped[float | None] = mapped_column(Float)  # avg depth of target
+
+    # tackling
+    comb: Mapped[float | None] = mapped_column(Float)
+    m_tkl_percent: Mapped[float | None] = mapped_column(Float)
+
+
 class SyncLog(Base):
     __tablename__ = "sync_log"
 
