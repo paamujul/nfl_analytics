@@ -4,6 +4,7 @@ from __future__ import annotations
 from sqlalchemy import Row, select
 from sqlalchemy.orm import Session
 
+from app.cache import league_cache
 from app.db.models import Game, Play, Team
 
 
@@ -37,6 +38,22 @@ def _team_play_metrics(plays: list[Row], as_offense: bool) -> dict:
 
 
 def _all_team_metrics(session: Session, season: int, phase: str) -> dict[str, dict]:
+    """Cached league-wide reduction. See app/cache.py for why single-flight matters.
+
+    The cached value must stay plain scalars: dict[str, dict[str, float|int|None]],
+    no ORM instances and no reference to the Session that produced it. It outlives
+    the request that built it by up to the TTL, and the session is closed by the
+    get_db dependency the moment that request returns -- so putting a Play or Team
+    in here turns every cache hit into a use-after-close DetachedInstanceError.
+    _compute_all_team_metrics only ever returns numbers, which is what makes it safe.
+    """
+    return league_cache.get_or_set(
+        ("compare", season, phase),
+        lambda: _compute_all_team_metrics(session, season, phase),
+    )
+
+
+def _compute_all_team_metrics(session: Session, season: int, phase: str) -> dict[str, dict]:
     # Select columns, not entities: this scans a whole season league-wide
     # (~46k rows). Hydrating Play objects costs ~15x the memory and pins every
     # one of them in the Session identity map until the request ends.

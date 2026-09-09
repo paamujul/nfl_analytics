@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -17,6 +17,11 @@ from app.analytics.team_stats import season_team_totals, team_detail
 from app.data.timeutil import parse_iso
 from app.db.models import Game, SyncLog
 from app.db.session import get_db
+
+# Browser/edge TTL for the analytics endpoints. Matches the TTL on the
+# in-process league cache (app/cache.py), so a client and the process behind it
+# never disagree about how stale these numbers are allowed to be.
+CACHE_SECONDS = 300
 
 # how stale last_successful_sync may get before /health reports unhealthy
 HEALTH_MAX_SYNC_AGE = timedelta(hours=6)
@@ -44,18 +49,25 @@ def seasons(db: Session = Depends(get_db)):
 
 
 @router.get("/teams")
-def teams(season: int = Query(...), phase: str = Query(...),
+def teams(response: Response, season: int = Query(...), phase: str = Query(...),
           db: Session = Depends(get_db)):
+    # Already a cheap SQL aggregate, so no in-process cache here -- this header
+    # exists only to let the edge absorb the repeats a grid of team cards makes.
+    response.headers["Cache-Control"] = "public, max-age=60"
     return season_team_totals(db, season, phase)
 
 
 @router.get("/teams/{team}")
-def team(team: str, season: int, phase: str, db: Session = Depends(get_db)):
+def team(team: str, response: Response, season: int, phase: str,
+         db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = "public, max-age=60"
     return team_detail(db, team.upper(), season, phase)
 
 
 @router.get("/teams/{team}/defense")
-def team_defense(team: str, season: int, phase: str, db: Session = Depends(get_db)):
+def team_defense(team: str, response: Response, season: int, phase: str,
+                 db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
     return defense_profile(db, team.upper(), season, phase)
 
 
@@ -68,13 +80,14 @@ def team_roster(team: str, side: str, season: int, phase: str,
 
 
 @router.get("/teams/{team}/lineup-impact")
-def team_lineup_impact(team: str, side: str, players: str, season: int, phase: str,
-                       db: Session = Depends(get_db)):
+def team_lineup_impact(team: str, response: Response, side: str, players: str,
+                       season: int, phase: str, db: Session = Depends(get_db)):
     if side not in ("offense", "defense"):
         raise HTTPException(400, "side must be offense or defense")
     ids = [p for p in players.split(",") if p]
     if not 1 <= len(ids) <= 6:
         raise HTTPException(400, "select between 1 and 6 players")
+    response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
     return lineup_impact(db, team.upper(), side, ids, season, phase)
 
 
@@ -90,13 +103,16 @@ def player_route_chart(player_id: str, game: str, db: Session = Depends(get_db))
 
 
 @router.get("/compare")
-def compare(teamA: str, teamB: str, season: int, phase: str,
+def compare(response: Response, teamA: str, teamB: str, season: int, phase: str,
             db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
     return compare_teams(db, teamA.upper(), teamB.upper(), season, phase)
 
 
 @router.get("/live")
-def live(db: Session = Depends(get_db)):
+def live(response: Response, db: Session = Depends(get_db)):
+    # In-progress scores: a stale copy is worse than a slow one.
+    response.headers["Cache-Control"] = "no-store"
     rows = db.scalars(
         select(Game).where(Game.status == "in").order_by(Game.kickoff)
     ).all()
@@ -109,7 +125,8 @@ def live(db: Session = Depends(get_db)):
 
 
 @router.get("/status")
-def status(db: Session = Depends(get_db)):
+def status(response: Response, db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = "no-store"
     recent = db.scalars(
         select(SyncLog).order_by(SyncLog.id.desc()).limit(25)
     ).all()
@@ -149,4 +166,9 @@ def health(db: Session = Depends(get_db)):
     body = {"status": "ok" if ok else "stale",
             "last_successful_sync": last_ok,
             "age_seconds": int(age) if age is not None else None}
-    return JSONResponse(body, status_code=200 if ok else 503)
+    # Set on the response we actually return, not on an injected Response --
+    # FastAPI only merges that one's headers into a value it serializes itself,
+    # and this route hands back its own. A cached 200 here would mask a wedged
+    # ingester from exactly the 503 UptimeRobot is watching for.
+    return JSONResponse(body, status_code=200 if ok else 503,
+                        headers={"Cache-Control": "no-store"})
