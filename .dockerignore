@@ -1,0 +1,35 @@
+# The Docker build context is the repo root (see backend/Dockerfile), so this
+# file -- not backend/.dockerignore -- is what keeps the context small.
+
+# Stale nested clone of this same repo, ~1.4 MB, gitignored but very much
+# present on disk. It was invisible to Docker only while the context was
+# backend/; from the root it would otherwise be shipped into the build.
+nfl_analytics/
+
+# Node
+frontend/node_modules
+frontend/dist
+
+# Python
+backend/.venv
+backend/storage
+backend/.pytest_cache
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+
+# VCS / tooling / editor
+.git
+.github
+.gitignore
+.claude
+**/.DS_Store
+.idea
+.vscode
+
+# Not needed at runtime
+backend/tests
+backend/requirements-dev.txt
+backend/pytest.ini
+deploy
+*.md
