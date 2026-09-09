@@ -6,9 +6,9 @@ on-field player-combination impact analysis.
 
 Validated against the completed **2025 season** (nflverse play-by-play), and live
 for the **2026 preseason → regular season → postseason** via a background
-ingestion service that continuously polls ESPN and persists everything to SQLite —
-the frontend is always served from the database, never from a blocking external
-API call.
+ingestion service that continuously polls ESPN and persists everything to the
+database — the frontend is always served from the database, never from a
+blocking external API call.
 
 ## Features
 
@@ -49,8 +49,12 @@ from both sources merge cleanly in one store.
 
 ## Stack
 
-- **Backend**: FastAPI + SQLAlchemy (SQLite, WAL) + polars/nflreadpy + httpx.
+- **Backend**: FastAPI + SQLAlchemy + polars/nflreadpy + httpx. Postgres in
+  deployment (Supabase); SQLite with WAL is the zero-config local default.
 - **Frontend**: React + Vite + TypeScript, Recharts + custom SVG field charts.
+
+Deployment is a single always-on container on a GCE VM behind a Cloudflare
+Tunnel, with Postgres at Supabase — see [DEPLOY_VM.md](DEPLOY_VM.md).
 
 ## Setup
 
