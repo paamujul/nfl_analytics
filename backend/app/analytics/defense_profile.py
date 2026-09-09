@@ -8,6 +8,7 @@ from __future__ import annotations
 from sqlalchemy import Row, select
 from sqlalchemy.orm import Session
 
+from app.cache import league_cache
 from app.db.models import Game, Play, Team
 
 
@@ -105,7 +106,7 @@ def _archetype(pcts: dict[str, int | None]) -> tuple[str, list[str]]:
     return headline, notes
 
 
-def defense_profile(session: Session, team: str, season: int, phase: str) -> dict:
+def _compute_league_defense(session: Session, season: int, phase: str) -> dict[str, dict]:
     # Column-only select: see the note in analytics/compare.py. _metrics_for
     # reads these straight off the Row, so its body is unchanged.
     plays = session.execute(
@@ -122,7 +123,25 @@ def defense_profile(session: Session, team: str, season: int, phase: str) -> dic
         if p.defteam:
             by_def.setdefault(p.defteam, []).append(p)
 
-    league = {abbr: _metrics_for(pl) for abbr, pl in by_def.items()}
+    return {abbr: _metrics_for(pl) for abbr, pl in by_def.items()}
+
+
+def _league_defense_metrics(session: Session, season: int, phase: str) -> dict[str, dict]:
+    """Cached league-wide reduction -- one entry serves all 32 teams.
+
+    Same invariant as compare._all_team_metrics: the cached value is plain
+    scalars only, dict[str, dict[str, float|int|None]]. It outlives the request
+    that built it, and that request's Session is closed on the way out, so an
+    ORM instance in here would be a use-after-close bug on the next hit.
+    """
+    return league_cache.get_or_set(
+        ("defense", season, phase),
+        lambda: _compute_league_defense(session, season, phase),
+    )
+
+
+def defense_profile(session: Session, team: str, season: int, phase: str) -> dict:
+    league = _league_defense_metrics(session, season, phase)
     mine = league.get(team, _metrics_for([]))
 
     rows = []
