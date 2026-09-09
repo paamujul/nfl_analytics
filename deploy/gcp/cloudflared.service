@@ -1,0 +1,54 @@
+# Cloudflare Tunnel: the only path from the internet to this VM.
+#
+# This unit is checked into git on purpose. `cloudflared service install`
+# generates its own unit at this same path -- do NOT run it, or it will
+# overwrite this file with a token-based one whose ingress rules live only in
+# the Cloudflare dashboard. A locally-managed config (--config below) keeps the
+# routing reviewable here and reproducible if the box is rebuilt.
+#
+# cloudflared runs on the host, not in Docker, so it dials 127.0.0.1:8600
+# directly -- the same loopback address the app container publishes on.
+
+[Unit]
+Description=Cloudflare Tunnel (nfl-analytics)
+Documentation=https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# cloudflared sends sd_notify READY=1, which is what Cloudflare's own generated
+# unit uses. UNVERIFIED on this box -- if `systemctl start` sits in
+# "activating" forever, the binary is older than that support: change this to
+# Type=simple. TimeoutStartSec=0 keeps that failure mode from timing out into
+# a restart loop while you look.
+Type=notify
+# Root, because /etc/cloudflared/<UUID>.json is a 0600 root-owned credential.
+User=root
+ExecStart=/usr/bin/cloudflared --no-autoupdate --config /etc/cloudflared/config.yml tunnel run
+Restart=always
+RestartSec=5
+TimeoutStartSec=0
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloudflared
+
+# Unlike nfl-analytics.service, hardening IS appropriate here: this really is
+# a host process, so the sandbox lands on the thing being confined. With
+# --no-autoupdate it should need nothing writable outside /run -- also
+# UNVERIFIED. If it fails to start with a permission error, add a
+# ReadWritePaths= for whatever path the journal names rather than dropping
+# ProtectSystem.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

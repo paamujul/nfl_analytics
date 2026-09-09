@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+#
+# Roll the VM onto a new image, and roll it back if the new one does not come
+# up. Installed by setup.sh to /usr/local/bin/nfl-deploy, root-owned 0755.
+#
+#   sudo /usr/local/bin/nfl-deploy us-east1-docker.pkg.dev/PROJ/REPO/nfl-analytics:SHA
+#
+# CI invokes this over an IAP-tunneled SSH session. It is the only thing CI is
+# allowed to run on the box.
+#
+set -euo pipefail
+
+IMAGE="${1:-}"
+IMAGE_FILE=/etc/nfl-analytics.image
+UNIT=nfl-analytics
+
+# /api/status, NOT /api/health.
+#
+# /api/health returns 503 once the last successful sync is older than six hours
+# (backend/app/api/routes.py, HEALTH_MAX_SYNC_AGE). That is exactly right for
+# uptime monitoring and exactly wrong here: after a quiet stretch -- an
+# offseason week, a Tuesday -- a perfectly good deploy would look like a failed
+# rollout and this script would roll back a working image. /api/status returns
+# 200 whenever the app is up and can reach the database, which is the question
+# a deploy gate is actually asking.
+HEALTH_URL=http://127.0.0.1:8600/api/status
+HEALTH_TIMEOUT=60
+
+if [[ $EUID -ne 0 ]]; then echo "nfl-deploy: must run as root" >&2; exit 1; fi
+if [[ -z "$IMAGE" ]]; then
+  echo "usage: nfl-deploy <image-tag>" >&2
+  exit 2
+fi
+
+log() { printf '==> %s\n' "$*"; }
+
+# Read the tag we are replacing before we overwrite it. Parsed rather than
+# sourced so a malformed file cannot execute anything.
+PREV_IMAGE="$(sed -n 's/^IMAGE=//p' "$IMAGE_FILE" 2>/dev/null | head -n1 || true)"
+log "current image: ${PREV_IMAGE:-<none>}"
+log "new image:     $IMAGE"
+
+wait_healthy() {
+  local deadline=$((SECONDS + HEALTH_TIMEOUT))
+  while (( SECONDS < deadline )); do
+    if curl -fsS --max-time 5 "$HEALTH_URL" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+rollback() {
+  echo "!!  new image failed its health check after ${HEALTH_TIMEOUT}s" >&2
+  if [[ -z "$PREV_IMAGE" ]]; then
+    echo "!!  no previous image recorded -- cannot roll back. The unit is left" >&2
+    echo "!!  stopped rather than crash-looping. Fix $IMAGE_FILE by hand." >&2
+    systemctl stop "$UNIT" || true
+    exit 1
+  fi
+  echo "!!  rolling back to $PREV_IMAGE" >&2
+  printf 'IMAGE=%s\n' "$PREV_IMAGE" > "$IMAGE_FILE"
+  systemctl restart "$UNIT"
+  if wait_healthy; then
+    echo "!!  rolled back successfully; the previous image is serving." >&2
+  else
+    echo "!!  ROLLBACK ALSO FAILED. The box is down. Check:" >&2
+    echo "!!      journalctl -u $UNIT -n 100 --no-pager" >&2
+  fi
+  # Non-zero either way: the deploy did not happen, and CI must go red even
+  # when the rollback worked.
+  exit 1
+}
+
+log "pulling $IMAGE"
+docker pull "$IMAGE"
+
+log "pointing $IMAGE_FILE at the new tag"
+printf 'IMAGE=%s\n' "$IMAGE" > "$IMAGE_FILE"
+
+log "restarting $UNIT"
+systemctl restart "$UNIT"
+
+log "waiting up to ${HEALTH_TIMEOUT}s for $HEALTH_URL"
+wait_healthy || rollback
+
+log "healthy"
+
+# The image carries polars and pyarrow and is not small; a 30 GB pd-standard
+# boot disk fills up in a few dozen deploys otherwise. `until=168h` keeps a
+# week of history so a manual rollback to something older than the immediately
+# previous tag does not have to re-pull. The running container's image is in
+# use and is never a prune candidate.
+log "pruning images older than 7 days"
+docker image prune -af --filter "until=168h" || true
+
+log "deployed $IMAGE"

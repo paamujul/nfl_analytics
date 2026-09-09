@@ -1,0 +1,30 @@
+# Cloudflare Tunnel ingress. Copy to /etc/cloudflared/config.yml and replace
+# the two <UUID> placeholders and <your-domain>. setup.sh drops this at
+# /etc/cloudflared/config.yml.example so an existing live config is never
+# clobbered.
+#
+# Locally-managed, not a dashboard token: the routing below is the reviewable
+# source of truth and survives rebuilding the box from scratch.
+#
+# The tunnel dials OUT to Cloudflare, so the VM needs no inbound firewall rule
+# for 80 or 443 at all. See DEPLOY_VM.md.
+
+tunnel: <UUID>
+credentials-file: /etc/cloudflared/<UUID>.json
+
+# One rule is all that is needed. The SPA is baked into the image and FastAPI
+# serves it from the same origin as /api, so there is nothing to split by path
+# -- no separate frontend host, no CORS, no second ingress entry.
+ingress:
+  - hostname: <your-domain>
+    service: http://127.0.0.1:8600
+    originRequest:
+      # The origin is on loopback. If it has not accepted the connection in
+      # 10s it is not slow, it is down, and failing fast gets a Cloudflare
+      # error page up instead of hanging the browser.
+      connectTimeout: 10s
+
+  # Required: cloudflared refuses to start without a catch-all as the last
+  # rule. Anything not matching the hostname above gets a 404 rather than
+  # being proxied.
+  - service: http_status:404

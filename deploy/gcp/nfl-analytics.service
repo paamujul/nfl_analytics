@@ -1,0 +1,86 @@
+# NFL Analytics: the API, the SPA, and the live ESPN ingester, all in one
+# container. Installed to /etc/systemd/system/nfl-analytics.service by setup.sh.
+#
+# systemd supervises the `docker run` client here rather than uvicorn directly.
+# That is the whole design: the image CI already builds is the unit of deploy,
+# and `nfl-deploy` swaps ${IMAGE} and restarts.
+
+[Unit]
+Description=NFL Analytics (FastAPI + SPA + live ESPN ingester)
+Documentation=https://github.com/paamujul/nfl_analytics
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=exec
+
+# Which image to run. nfl-deploy rewrites this file and restarts the unit; a
+# rollback is the same file with the previous tag. Kept separate from
+# /etc/nfl-analytics.env so the deploy path never touches the secrets file.
+# (/etc/nfl-analytics.env is deliberately NOT an EnvironmentFile -- it goes to
+# the container via --env-file, so DATABASE_URL never enters the docker
+# client's own environment, where it would show up in `ps` and in coredumps.)
+EnvironmentFile=/etc/nfl-analytics.image
+
+# A container left behind by an unclean stop would make `--name` collide.
+ExecStartPre=-/usr/bin/docker rm -f nfl-analytics
+
+# -p 127.0.0.1:8600:8600 -- the loopback prefix is load-bearing. Plain
+#   `-p 8600:8600` binds every interface AND writes Docker's own DOCKER chain
+#   iptables rules, which are consulted before the rules a GCE firewall
+#   implies; the port would be reachable from the internet even though you
+#   never created an ingress rule for it. Cloudflared connects over loopback,
+#   so there is no reason to bind anything wider.
+#
+# --memory 1200m -- headroom on the 2 GB e2-small. Drop this to 700m when the
+#   VM is downsized to a 1 GB e2-micro after the GCP trial credits expire
+#   (see DEPLOY_VM.md); the swapfile is what makes 700m survivable.
+#
+# --memory-swap 2g -- total memory+swap, i.e. 800m of swap available to the
+#   container. Without this flag Docker allows swap equal to --memory, which
+#   is not what the host swapfile was sized for.
+#
+# --stop-timeout 45 -- see the shutdown note below. Docker's default is 10s.
+ExecStart=/usr/bin/docker run --rm --name nfl-analytics \
+    --env-file /etc/nfl-analytics.env \
+    -p 127.0.0.1:8600:8600 \
+    -v /var/lib/nfl-analytics:/app/storage \
+    --memory 1200m --memory-swap 2g \
+    --stop-timeout 45 \
+    --log-driver journald \
+    ${IMAGE}
+
+# Shutdown deadlines must nest: 30 < 45 < 60.
+#   30s  LiveIngester.stop() (backend/app/data/ingest.py) waits up to 30s for
+#        the in-flight poll cycle to finish rather than cancelling a coroutine
+#        mid-transaction.
+#   45s  docker's SIGTERM->SIGKILL grace period, set both on `run` (for a stop
+#        issued any other way) and here on `stop`.
+#   60s  systemd's deadline for ExecStop.
+# Docker's DEFAULT is 10 seconds. Leave any of these off and Docker SIGKILLs
+# the container before the ingester's graceful shutdown ever runs -- on every
+# single deploy, silently.
+ExecStop=/usr/bin/docker stop -t 45 nfl-analytics
+TimeoutStopSec=60
+
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nfl-analytics
+
+# --- deliberately NOT hardened -------------------------------------------
+# deploy/oracle/nfl-analytics.service carried ProtectSystem=strict,
+# ProtectHome, ReadWritePaths, PrivateTmp and friends. Do not port them here.
+# Those confined a uvicorn process running on the host. The process this unit
+# starts is the docker *client*; the sandbox would apply to it and not to the
+# application at all -- and ProtectSystem=strict would cut off
+# /var/run/docker.sock, so the unit would simply fail to start.
+#
+# The isolation now lives in the container: a non-root uid (10001), a
+# read-only-by-convention image, one bind mount, and a hard memory cap.
+
+[Install]
+WantedBy=multi-user.target
