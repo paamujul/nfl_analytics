@@ -19,6 +19,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
 
+from app.cache import league_cache
 from app.data import espn_source as es
 from app.db.models import Base, Game, Play, Player, PlayerGameStat
 from app.db.upsert import upsert_all
@@ -27,6 +28,23 @@ FIXTURE = Path(__file__).parent / "fixtures" / "espn_summary_401873286.json"
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 BACKENDS = ["sqlite"] + (["postgresql"] if TEST_DATABASE_URL else [])
+
+
+@pytest.fixture(autouse=True)
+def _clear_league_cache():
+    """Reset the league metric cache around every test.
+
+    app.cache.league_cache is module-level and keyed on (scope, season, phase)
+    only -- it carries no engine identity, by design, since in production there
+    is one database. Under `engine` below that assumption breaks: the fixture is
+    parameterized over SQLite and Postgres, so the second backend would be
+    served whatever the first one computed for the same season/phase and assert
+    green without ever querying itself. The same applies to any two tests that
+    load different fixture data at one season/phase.
+    """
+    league_cache.clear()
+    yield
+    league_cache.clear()
 
 
 @pytest.fixture(params=BACKENDS)
