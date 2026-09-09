@@ -1,13 +1,13 @@
 """Head-to-head team comparison with league-percentile context."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import Row, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Game, Play, Team
 
 
-def _team_play_metrics(plays: list[Play], as_offense: bool) -> dict:
+def _team_play_metrics(plays: list[Row], as_offense: bool) -> dict:
     scrim = [p for p in plays if p.play_type in ("pass", "run")]
     passes = [p for p in scrim if p.play_type == "pass"]
     runs = [p for p in scrim if p.play_type == "run"]
@@ -37,13 +37,19 @@ def _team_play_metrics(plays: list[Play], as_offense: bool) -> dict:
 
 
 def _all_team_metrics(session: Session, season: int, phase: str) -> dict[str, dict]:
-    plays = session.scalars(
-        select(Play).join(Game, Game.id == Play.game_id)
+    # Select columns, not entities: this scans a whole season league-wide
+    # (~46k rows). Hydrating Play objects costs ~15x the memory and pins every
+    # one of them in the Session identity map until the request ends.
+    # _team_play_metrics reads these by attribute off the Row unchanged.
+    plays = session.execute(
+        select(Play.game_id, Play.posteam, Play.defteam, Play.play_type,
+               Play.yards_gained, Play.epa, Play.success, Play.sack)
+        .join(Game, Game.id == Play.game_id)
         .where(Game.season == season, Game.phase == phase,
                Play.play_type.in_(("pass", "run")))
     ).all()
-    by_off: dict[str, list[Play]] = {}
-    by_def: dict[str, list[Play]] = {}
+    by_off: dict[str, list[Row]] = {}
+    by_def: dict[str, list[Row]] = {}
     for p in plays:
         if p.posteam:
             by_off.setdefault(p.posteam, []).append(p)

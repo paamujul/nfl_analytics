@@ -5,13 +5,13 @@ label ("blitz-heavy, strong against the pass, vulnerable on the ground").
 """
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import Row, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Game, Play, Team
 
 
-def _metrics_for(plays: list[Play]) -> dict:
+def _metrics_for(plays: list[Row]) -> dict:
     passes = [p for p in plays if p.play_type == "pass"]
     runs = [p for p in plays if p.play_type == "run"]
     games = len({p.game_id for p in plays})
@@ -106,13 +106,18 @@ def _archetype(pcts: dict[str, int | None]) -> tuple[str, list[str]]:
 
 
 def defense_profile(session: Session, team: str, season: int, phase: str) -> dict:
-    plays = session.scalars(
-        select(Play).join(Game, Game.id == Play.game_id)
+    # Column-only select: see the note in analytics/compare.py. _metrics_for
+    # reads these straight off the Row, so its body is unchanged.
+    plays = session.execute(
+        select(Play.game_id, Play.defteam, Play.play_type, Play.yards_gained,
+               Play.epa, Play.success, Play.sack, Play.interception,
+               Play.n_pass_rushers)
+        .join(Game, Game.id == Play.game_id)
         .where(Game.season == season, Game.phase == phase,
                Play.play_type.in_(("pass", "run")))
     ).all()
 
-    by_def: dict[str, list[Play]] = {}
+    by_def: dict[str, list[Row]] = {}
     for p in plays:
         if p.defteam:
             by_def.setdefault(p.defteam, []).append(p)
