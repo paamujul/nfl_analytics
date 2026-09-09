@@ -23,6 +23,21 @@
 #   called their own defenses. Where the caller is null, sync_coaching_staff
 #   falls back to the head coach and writes a sync_log row saying it did.
 #
+# LIMIT OF THE "DERIVED" GUARANTEE -- nflverse coach data degrades after 2023.
+#   load_schedules() carries a per-game coach, so 2021-2023 genuinely surface
+#   mid-season changes (8 of them, each noted below). For 2024 and 2025 it
+#   records exactly ONE coach per team-season and no longer reflects in-season
+#   firings at all -- verified: zero multi-coach teams in either year, against
+#   three real changes in 2024 alone. So for 2024+ `head_coach` means "who
+#   nflverse lists", not "who coached the most games", and the most-frequent
+#   rule above silently stops applying.
+#
+#   The concrete cost: NYJ 2024 records Robert Saleh, who coached 5 of 17 games.
+#   Jeff Ulbrich coached the other 12. Any play-call attribution for weeks 6-18
+#   credits Saleh's staff for Ulbrich's games. NO and CHI have the same shape,
+#   less severely. Those three rows are annotated from the author's own
+#   knowledge and are UNVERIFIED like every other non-derived field here.
+#
 # verified: false everywhere until a human checks the row and flips it.
 
 staff:
@@ -752,6 +767,7 @@ staff:
       offensive_play_caller: null
       defensive_play_caller: null
       verified: false
+      note: "2024 nflverse records Eberflus only; he coached 12g before being fired wk13. Thomas Brown coached the remaining 5g. UNVERIFIED, not from nflverse."
     "CIN":
       head_coach: zac-taylor
       oc: dan-pitcher
@@ -871,6 +887,7 @@ staff:
       offensive_play_caller: null
       defensive_play_caller: null
       verified: false
+      note: "2024 nflverse records Allen only; he coached 9g before being fired wk9. Darren Rizzi coached the remaining 8g. UNVERIFIED, not from nflverse."
     "NYG":
       head_coach: brian-daboll
       oc: mike-kafka
@@ -885,6 +902,7 @@ staff:
       offensive_play_caller: null
       defensive_play_caller: null
       verified: false
+      note: "2024 nflverse records Saleh only; he coached 5g before being fired wk5. Jeff Ulbrich coached the remaining 12g. UNVERIFIED, not from nflverse. NOTE: the most-frequent rule would pick Ulbrich -- nflverse does not expose the split."
     "PHI":
       head_coach: nick-sirianni
       oc: kellen-moore
