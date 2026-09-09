@@ -84,6 +84,21 @@ class PlayerGameStat(Base):
     rec_td: Mapped[int] = mapped_column(Integer, default=0)
     rec_long: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Defensive box score. These ship in the same load_player_stats download the
+    # offensive columns above come from -- we were parsing the file and dropping
+    # them. Nullable rather than default-0 because the ESPN live ingester writes
+    # this table too and has no defensive equivalent: a 0 there would be a lie,
+    # whereas NULL correctly says "this source didn't tell us".
+    def_tackles_solo: Mapped[int | None] = mapped_column(Integer)
+    def_tackle_assists: Mapped[int | None] = mapped_column(Integer)
+    def_tackles_for_loss: Mapped[float | None] = mapped_column(Float)
+    def_fumbles_forced: Mapped[int | None] = mapped_column(Integer)
+    def_sacks: Mapped[float | None] = mapped_column(Float)  # half-sacks: 2.5 is real
+    def_qb_hits: Mapped[int | None] = mapped_column(Integer)
+    def_interceptions: Mapped[int | None] = mapped_column(Integer)
+    def_pass_defended: Mapped[int | None] = mapped_column(Integer)
+    def_tds: Mapped[int | None] = mapped_column(Integer)
+
 
 class Play(Base):
     __tablename__ = "plays"
@@ -125,6 +140,72 @@ class Play(Base):
     defense_players: Mapped[str | None] = mapped_column(Text)
     n_pass_rushers: Mapped[int | None] = mapped_column(Integer)
     is_blitz: Mapped[bool | None] = mapped_column(Boolean)
+
+    # --- play-call context (load_pbp) ------------------------------------
+    # Everything below is nullable with no default. Fill rates vary by season
+    # and by source file (see sync_pbp's docstring) -- consumers MUST treat
+    # None as "not charted", never as a zero or a False.
+    shotgun: Mapped[bool | None] = mapped_column(Boolean)
+    no_huddle: Mapped[bool | None] = mapped_column(Boolean)
+    qb_dropback: Mapped[bool | None] = mapped_column(Boolean)
+    qb_scramble: Mapped[bool | None] = mapped_column(Boolean)
+    goal_to_go: Mapped[bool | None] = mapped_column(Boolean)
+    first_down: Mapped[bool | None] = mapped_column(Boolean)
+    penalty: Mapped[bool | None] = mapped_column(Boolean)
+    pass_length: Mapped[str | None] = mapped_column(String(8))  # short|deep (charted)
+
+    # Drive / series context. Stored as ints; nflverse ships them as Float64
+    # purely because the column is nullable in parquet.
+    drive: Mapped[int | None] = mapped_column(Integer)
+    fixed_drive: Mapped[int | None] = mapped_column(Integer)
+    fixed_drive_result: Mapped[str | None] = mapped_column(String(24))
+    drive_start_yard_line: Mapped[str | None] = mapped_column(String(12))  # "WAS 25"
+    drive_play_count: Mapped[int | None] = mapped_column(Integer)
+    series: Mapped[int | None] = mapped_column(Integer)
+    series_result: Mapped[str | None] = mapped_column(String(24))
+
+    # Game state at snap -- the situational features a play-call model needs.
+    score_differential: Mapped[float | None] = mapped_column(Float)
+    game_seconds_remaining: Mapped[float | None] = mapped_column(Float)
+    half_seconds_remaining: Mapped[float | None] = mapped_column(Float)
+    posteam_timeouts_remaining: Mapped[int | None] = mapped_column(Integer)
+    wp: Mapped[float | None] = mapped_column(Float)  # win probability for posteam
+
+    # nflverse's own pass-probability model and pass-rate-over-expected. This is
+    # the baseline any later play-call model has to beat, so it is stored rather
+    # than recomputed.
+    xpass: Mapped[float | None] = mapped_column(Float)
+    pass_oe: Mapped[float | None] = mapped_column(Float)
+
+    # --- personnel & coverage (load_participation) -----------------------
+    offense_formation: Mapped[str | None] = mapped_column(String(16))  # SHOTGUN|PISTOL|...
+    # 2021-22 uses the short skill-position form ("1 RB, 1 TE, 3 WR"); 2023+
+    # lists all eleven ("1 C, 1 G, 1 QB, 1 RB, 3 T, 2 TE, 2 WR"), which measures
+    # up to 66 chars. Sized with headroom -- upsert_all clamps overlong strings
+    # silently, so an under-sized column here would quietly corrupt personnel.
+    offense_personnel: Mapped[str | None] = mapped_column(String(80))
+    defense_personnel: Mapped[str | None] = mapped_column(String(80))
+    defenders_in_box: Mapped[int | None] = mapped_column(Integer)
+    was_pressure: Mapped[bool | None] = mapped_column(Boolean)
+    defense_man_zone_type: Mapped[str | None] = mapped_column(String(16))  # MAN_/ZONE_COVERAGE
+    defense_coverage_type: Mapped[str | None] = mapped_column(String(16))  # COVER_3|COMBO|...
+    route: Mapped[str | None] = mapped_column(String(24))  # targeted receiver's route
+    time_to_throw: Mapped[float | None] = mapped_column(Float)
+    n_offense: Mapped[int | None] = mapped_column(Integer)
+    n_defense: Mapped[int | None] = mapped_column(Integer)
+
+    # --- FTN charting (load_ftn_charting, 2022+) -------------------------
+    # These are typed fields, which is why nothing in this codebase parses the
+    # `desc` prose for play-action / motion / screen / RPO.
+    is_play_action: Mapped[bool | None] = mapped_column(Boolean)
+    is_motion: Mapped[bool | None] = mapped_column(Boolean)
+    is_screen_pass: Mapped[bool | None] = mapped_column(Boolean)
+    is_rpo: Mapped[bool | None] = mapped_column(Boolean)
+    is_trick_play: Mapped[bool | None] = mapped_column(Boolean)
+    is_qb_sneak: Mapped[bool | None] = mapped_column(Boolean)
+    qb_location: Mapped[str | None] = mapped_column(String(2))  # U(nder)|S(hotgun)|P(istol)
+    n_offense_backfield: Mapped[int | None] = mapped_column(Integer)
+    n_defense_box: Mapped[int | None] = mapped_column(Integer)
 
     desc: Mapped[str | None] = mapped_column(Text)
 
