@@ -341,7 +341,7 @@ def sync_coaching_staff(season: int) -> int:
     counted in the sync_log message -- fallbacks must be visible, because
     "the OC called it" and "we assumed the HC called it" are different claims.
     """
-    import yaml  # PyYAML; arrives transitively via uvicorn[standard]
+    import yaml  # PyYAML, pinned in requirements.txt
 
     if not COACHES_YML.exists():
         with db_session() as s:

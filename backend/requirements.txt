@@ -10,3 +10,8 @@ httpx==0.28.1
 polars==1.44.1
 nflreadpy==0.1.5
 pyarrow==25.0.1
+# Read by app/data/nflverse_source.py for deploy/data/coaches.yml. It was
+# reaching us only because something else happened to install it -- nothing in
+# this file required it, so a resolver change would have broken the coaching
+# loader at runtime rather than at build time.
+pyyaml==6.0.3
