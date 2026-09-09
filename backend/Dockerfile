@@ -58,9 +58,17 @@ USER nflapp
 # the one thing left on Cloud Run) keeps working. Jobs override the command
 # entirely (python -m app.cli refresh-nflverse, seed).
 #
+# `exec` is load-bearing, not style. Without it PID 1 stays `sh` (verified:
+# /proc/1/cmdline read back as `sh -c uvicorn ...`, so dash does NOT fold this
+# into an exec -- the ${PORT} expansion defeats that optimisation). Docker sends
+# SIGTERM to PID 1 and sh does not forward it, so uvicorn would never shut down
+# gracefully: LiveIngester.stop() (ingest.py:165) would never get to drain the
+# in-flight cycle, and every deploy would SIGKILL mid-transaction. The
+# --stop-timeout 45 / TimeoutStopSec=60 nesting in deploy/gcp/ depends on this.
+#
 # --proxy-headers/--forwarded-allow-ips=* lets uvicorn trust X-Forwarded-*.
 # Safe here because the container publishes only on the VM's loopback and the
 # sole client is cloudflared on that same host -- nothing untrusted can reach
 # the socket to forge those headers.
 EXPOSE 8600
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8600} --proxy-headers --forwarded-allow-ips=*"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8600} --proxy-headers --forwarded-allow-ips=*"]

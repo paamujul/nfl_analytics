@@ -23,7 +23,7 @@ An always-on VM gets the 45-second poller back. That is the entire trade.
 |---|---|---|
 | API + SPA | Cloud Run + Cloudflare Pages, two origins | one container on one VM, same origin |
 | Live ingestion | Cloud Run Job, `*/10 * * * *` | in-process, ~45s during games |
-| nflverse refresh | Cloud Run Job, daily | systemd timer or `docker exec` on the VM |
+| nflverse refresh | Cloud Run Job, daily | **unchanged** -- still a Cloud Run Job |
 | Database | Supabase Postgres | unchanged |
 | Ingress | Cloud Run URL + Pages CDN | Cloudflare Tunnel → 127.0.0.1:8600 |
 | Static assets | Pages CDN | Cloudflare edge in front of the tunnel |
@@ -515,17 +515,24 @@ recreating the Scheduler jobs and Pages build config is the slow part.
 ## 12. Season rollover
 
 The ESPN poller picks up phase changes on its own. The nflverse refresh is the
-only thing that names a season. It is no longer a Cloud Run Job; run it on the
-VM against the running container:
+only thing that names a season, and it **stays a Cloud Run Job** -- it loads a
+season of parquet and needs 2 GiB, which is more than this VM has (and far more
+than the e2-micro it downsizes to). Only the *poll* job was retired; the refresh
+job and its Cloud Scheduler entry survive the migration untouched.
+
+Rolling over a season means bumping the year in the job's args:
 
 ```bash
-sudo docker exec nfl-analytics python -m app.cli refresh-nflverse 2027
+gcloud run jobs update nfl-analytics-nflverse-refresh \
+  --region "$REGION" --args=-m,app.cli,refresh-nflverse,2027
 ```
 
-Scheduling it as a systemd timer is the obvious follow-up. Note the memory: the
-refresh loads season parquet and wanted 2 GB as a Cloud Run Job, which is more
-than an e2-micro has. Run it by hand from a workstation against the session
-pooler, or accept that it leans on swap.
+`.github/workflows/deploy.yml` re-applies that on every deploy, so change it
+there too or the next push reverts it.
+
+Running it on the VM instead (`docker exec nfl-analytics python -m app.cli
+refresh-nflverse <year>`) works only if you accept heavy swap use, and will
+OOM outright on an e2-micro. It is a debugging escape hatch, not the schedule.
 
 ---
 
