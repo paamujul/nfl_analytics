@@ -72,8 +72,19 @@ def parse_personnel(text: str | None) -> tuple[int | None, int | None, int | Non
     add FB into RB, which makes the FTN seasons agree with the nflverse ones and
     reproduces the familiar 11/12/21 shorthand.
     """
-    if _parse_personnel_ext is not None:  # pragma: no cover
-        return _parse_personnel_ext(text)
+    if _parse_personnel_ext is not None:
+        # The two modules agree on the hard part -- tokenise rather than split
+        # positionally, and fold FB into the backfield -- but not on the return
+        # shape: analytics.personnel hands back raw counts {"RB": 1, "TE": 2}
+        # and does the FB fold in offense_grouping(), while this function's
+        # callers unpack a 3-tuple. Adapt here rather than changing either
+        # contract, and do the fold explicitly so the two paths cannot drift.
+        counts = _parse_personnel_ext(text)
+        if not counts:
+            return (None, None, None)
+        return (counts.get("RB", 0) + counts.get("FB", 0),
+                counts.get("TE", 0),
+                counts.get("WR", 0))
     if not text:
         return (None, None, None)
     counts: dict[str, int] = {}
