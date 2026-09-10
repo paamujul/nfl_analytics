@@ -39,7 +39,8 @@ export default function TeamPage() {
           <h1>{team.name}</h1>
           <span className="sub">
             {team.division} · {season} {PHASE_LABEL[phase]?.toLowerCase()} ·{' '}
-            <Link to="/defense" style={{ color: 'var(--series-1)', fontWeight: 600 }}>defense profile →</Link>
+            <Link to="/defense" style={{ color: 'var(--series-1)', fontWeight: 600 }}>defense profile →</Link>{' · '}
+            <Link to={`/coach/${abbr}`} style={{ color: 'var(--series-1)', fontWeight: 600 }}>coaching profile →</Link>
           </span>
         </div>
       </div>
