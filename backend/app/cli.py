@@ -6,6 +6,7 @@
     python -m app.cli refresh-nflverse 2026   nflverse refresh + sync_log prune
     python -m app.cli backfill-nflverse 2025  one season from nflverse
     python -m app.cli backfill-espn 2026 pre  one ESPN phase (pre|reg|post)
+    python -m app.cli train 2025              fit the play-call model (see below)
 
 Every command exits non-zero when the work actually failed, so Cloud Scheduler
 and CI report red instead of silently succeeding at nothing.
@@ -63,6 +64,25 @@ def _cmd_backfill_nflverse(season: int) -> int:
     return 1 if out.get("failed") else 0
 
 
+def _cmd_train(season: int) -> int:
+    """Fit the play-call model, holding `season` out as the validation year.
+
+    RUN THIS IN A 4 GiB CLOUD RUN JOB, NOT ON THE VM. It imports lightgbm, numpy
+    and scipy (~120 MB of RSS before any data is read) and peaks around 600 MB
+    on the five-season backfill; the VM has 1-2 GB and is serving the API. The
+    import is inside this function for the same reason -- `python -m app.cli
+    poll-once` must not pay for the trainer.
+
+    Exits non-zero when the situational model fails to beat nflverse's `xpass`
+    on the held-out season, so a scheduled retrain that regresses shows up red
+    instead of quietly replacing a good model with a worse one.
+    """
+    from app.ml.train import format_report, run
+    out = run(season)
+    print(format_report(out))
+    return 0 if out["situation"]["beats_baseline"] else 1
+
+
 def _cmd_backfill_espn(season: int, phase: str) -> int:
     if phase not in PHASE_WEEKS:
         raise SystemExit(f"phase must be one of {sorted(PHASE_WEEKS)}, got {phase!r}")
@@ -94,6 +114,7 @@ def main() -> None:
         "poll-once": lambda: _cmd_poll_once(),
         "refresh-nflverse": lambda: _cmd_refresh_nflverse(_arg_int(rest, 0, "season")),
         "backfill-nflverse": lambda: _cmd_backfill_nflverse(_arg_int(rest, 0, "season")),
+        "train": lambda: _cmd_train(_arg_int(rest, 0, "season")),
         "backfill-espn": lambda: _cmd_backfill_espn(
             _arg_int(rest, 0, "season"), rest[1] if len(rest) > 1 else "pre"),
     }
