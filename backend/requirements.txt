@@ -15,3 +15,9 @@ pyarrow==25.0.1
 # this file required it, so a resolver change would have broken the coaching
 # loader at runtime rather than at build time.
 pyyaml==6.0.3
+# Play-call model (app/ml/). Pulls numpy and scipy, ~120 MB of RSS between
+# them, so it is imported ONLY inside app/ml -- never at module scope anywhere
+# app.main reaches, exactly as app/db/upsert.py does for polars. Training runs
+# in a 4 GiB Cloud Run Job (`python -m app.cli train 2025`); the API process
+# only ever loads a serialized booster, which is a few MB.
+lightgbm==4.6.0
