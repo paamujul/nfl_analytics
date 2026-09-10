@@ -9,11 +9,15 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.analytics.compare import compare_teams
+from app.analytics.defense_personnel import team_defense_personnel
 from app.analytics.defense_profile import defense_profile
+from app.analytics.drives import SCRIPT_LENGTH, team_drives
 from app.analytics.lineup_impact import lineup_impact, roster_for_side
+from app.analytics.playbook import play_caller_playbook, team_playbook
 from app.analytics.player_quarters import player_quarter_splits
 from app.analytics.route_charts import player_routes
 from app.analytics.team_stats import season_team_totals, team_detail
+from app.analytics.usage import team_usage
 from app.data.timeutil import parse_iso
 from app.db.models import Game, SyncLog
 from app.db.session import get_db
@@ -107,6 +111,55 @@ def compare(response: Response, teamA: str, teamB: str, season: int, phase: str,
             db: Session = Depends(get_db)):
     response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
     return compare_teams(db, teamA.upper(), teamB.upper(), season, phase)
+
+
+# --- coaching views -------------------------------------------------------
+# All four are backed by a league-wide reduction held in app/cache.py for
+# CACHE_SECONDS, so the edge TTL matches: a client and the process behind it
+# should never disagree about how stale these numbers are allowed to be.
+#
+# `response: Response` has no default, so it must precede the Depends()
+# parameters -- Python would reject the signature otherwise.
+
+
+@router.get("/coach/playbook")
+def coach_playbook(response: Response, season: int, phase: str,
+                   team: str | None = None, coach: str | None = None,
+                   db: Session = Depends(get_db)):
+    """Offensive playbook for one team, or for one play-caller across teams."""
+    if bool(team) == bool(coach):
+        raise HTTPException(400, "pass exactly one of team or coach")
+    response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
+    if team:
+        return team_playbook(db, team.upper(), season, phase)
+    try:
+        return play_caller_playbook(db, coach, season, phase)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.get("/coach/drives")
+def coach_drives(response: Response, team: str, season: int, phase: str,
+                 script_length: int = SCRIPT_LENGTH,
+                 db: Session = Depends(get_db)):
+    if not 1 <= script_length <= 40:
+        raise HTTPException(400, "script_length must be between 1 and 40")
+    response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
+    return team_drives(db, team.upper(), season, phase, script_length)
+
+
+@router.get("/coach/usage")
+def coach_usage(response: Response, team: str, season: int, phase: str,
+                db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
+    return team_usage(db, team.upper(), season, phase)
+
+
+@router.get("/coach/defense")
+def coach_defense(response: Response, team: str, season: int, phase: str,
+                  db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
+    return team_defense_personnel(db, team.upper(), season, phase)
 
 
 @router.get("/live")
