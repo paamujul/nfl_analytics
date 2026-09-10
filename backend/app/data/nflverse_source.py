@@ -407,10 +407,16 @@ def sync_coaching_staff(season: int) -> int:
             if slug:
                 coaches[slug] = {"id": slug, "name": names.get(slug, slug)}
 
+        # Deliberately NOT substituting the head coach here. Writing the
+        # fallback into the column makes it indistinguishable from a real
+        # attribution: _caller_for() checks `offensive_play_caller_id is None`
+        # to set fell_back_to_head_coach, and with the substitution applied at
+        # ingest that flag could never fire -- 58 of 160 team-seasons showed
+        # the head coach as the play-caller with nothing marking it a guess.
+        # The column now records what is known; consumers fall back and say so.
         hc = row["head_coach_id"]
         for col in ("offensive_play_caller_id", "defensive_play_caller_id"):
             if not row[col] and hc:
-                row[col] = hc
                 fallbacks += 1
 
         want = upstream.get(team)

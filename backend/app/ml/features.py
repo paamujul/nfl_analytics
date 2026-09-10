@@ -183,7 +183,9 @@ def load_play_frames(engine, seasons: tuple[int, ...]) -> PlayFrames:
           AND g.season BETWEEN {int(lo)} AND {int(hi)}
     """
     staff_sql = f"""
-        SELECT season, team, offensive_play_caller_id
+        SELECT season, team,
+               COALESCE(offensive_play_caller_id, head_coach_id)
+                   AS offensive_play_caller_id
         FROM coaching_staff
         WHERE season BETWEEN {int(lo)} AND {int(hi)}
     """
