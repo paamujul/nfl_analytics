@@ -13,19 +13,27 @@ from app.analytics.defense_personnel import team_defense_personnel
 from app.analytics.defense_profile import defense_profile
 from app.analytics.drives import SCRIPT_LENGTH, team_drives
 from app.analytics.lineup_impact import lineup_impact, roster_for_side
-from app.analytics.playbook import play_caller_playbook, team_playbook
+from app.analytics.playbook import (play_caller_for, play_caller_playbook,
+                                    team_playbook)
 from app.analytics.player_quarters import player_quarter_splits
 from app.analytics.route_charts import player_routes
 from app.analytics.team_stats import season_team_totals, team_detail
 from app.analytics.usage import team_usage
 from app.data.timeutil import parse_iso
-from app.db.models import Game, SyncLog
+from app.cache import TTLCache
+from app.db.models import Game, Play, SyncLog
 from app.db.session import get_db
 
 # Browser/edge TTL for the analytics endpoints. Matches the TTL on the
 # in-process league cache (app/cache.py), so a client and the process behind it
 # never disagree about how stale these numbers are allowed to be.
 CACHE_SECONDS = 300
+
+# Loaded LightGBM boosters, keyed by feature set + version. Separate from
+# app.cache.league_cache, whose contract is plain scalars -- a booster is
+# neither scalar nor cheap to rebuild. TTLCache is reused for its per-key
+# single-flight: without it, N cold requests each deserialize the model.
+_model_cache = TTLCache(ttl=900.0, maxsize=4)
 
 # how stale last_successful_sync may get before /health reports unhealthy
 HEALTH_MAX_SYNC_AGE = timedelta(hours=6)
@@ -160,6 +168,71 @@ def coach_defense(response: Response, team: str, season: int, phase: str,
                   db: Session = Depends(get_db)):
     response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
     return team_defense_personnel(db, team.upper(), season, phase)
+
+
+@router.get("/coach/predict")
+def coach_predict(response: Response, team: str, opponent: str, season: int,
+                  phase: str, game: str | None = None,
+                  feature_set: str = "situation",
+                  db: Session = Depends(get_db)):
+    """Predicted pass/run split for a matchup, or replayed through one game.
+
+    Imports app.ml lazily and deliberately. That package pulls polars and
+    lightgbm -- roughly 120 MB of resident memory between them -- and the API
+    process serves this one route out of eighteen. app/db/upsert.py documents
+    the same discipline for the ingest path; on a 1-2 GB VM it is the
+    difference between fitting and not.
+    """
+    if feature_set not in ("situation", "presnap"):
+        raise HTTPException(400, "feature_set must be situation or presnap")
+
+    caller = play_caller_for(db, team.upper(), season)
+    if caller is None or not caller["coach_id"]:
+        raise HTTPException(404, f"no coaching staff on record for {team} {season}")
+
+    # The model keys on the QB, so pick the one who actually threw: a backup's
+    # id would produce a confident prediction about the wrong offence.
+    qb_id = db.scalar(
+        select(Play.passer_id).join(Game, Game.id == Play.game_id)
+        .where(Game.season == season, Game.phase == phase,
+               Play.posteam == team.upper(), Play.passer_id.isnot(None))
+        .group_by(Play.passer_id).order_by(func.count().desc()).limit(1))
+
+    from app.ml import predict as ml  # noqa: PLC0415 -- see the docstring
+
+    try:
+        model = _model_cache.get_or_set(
+            ("playcall", feature_set), lambda: ml.load(feature_set))
+    except Exception as exc:
+        # No artifact is the ordinary case on a fresh deploy, not a bug.
+        raise HTTPException(
+            503, "no trained play-call model is available; run "
+                 f"`python -m app.cli train {season}` and redeploy") from exc
+
+    response.headers["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
+    out = {
+        "team": team.upper(), "opponent": opponent.upper(),
+        "season": season, "phase": phase,
+        "play_caller": caller,
+        "qb_id": qb_id,
+        "model": {
+            "version": model.version,
+            "feature_set": model.feature_set,
+            "metrics": model.metrics,
+        },
+    }
+    if game:
+        out["in_game"] = ml.in_game(model, db.get_bind(), game, team.upper())
+        return out
+
+    out["pregame"] = ml.pregame(model, team.upper(), opponent.upper(),
+                                caller["coach_id"], qb_id)
+    # xpass is computed per play and does not exist before kickoff, so the
+    # model runs without its strongest feature here. Say so rather than let a
+    # caller read pre-game numbers as equal in quality to in-game ones.
+    out["caveat"] = ("pre-game: no xpass and no sequence history, so these are "
+                     "coarser than in-game predictions")
+    return out
 
 
 @router.get("/live")

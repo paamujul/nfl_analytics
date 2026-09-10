@@ -342,6 +342,22 @@ def _caller_for(row: Row, names: dict[str, str]) -> dict:
     }
 
 
+def play_caller_for(session: Session, team: str, season: int) -> dict | None:
+    """The play-caller attribution for one team-season, caveats attached.
+
+    Exists so callers outside this module -- the predict endpoint -- get the
+    same fallback and the same warnings as the playbook page, rather than
+    re-deriving "offensive_play_caller_id or head_coach_id" and quietly
+    dropping `verified` and `note` on the way. Returns None when the season has
+    no staff row at all.
+    """
+    row = next((r for r in _staff_rows(session, season) if r.team == team), None)
+    if row is None:
+        return None
+    ids = {row.offensive_play_caller_id, row.head_coach_id}
+    return _caller_for(row, _coach_names(session, ids))
+
+
 def team_playbook(session: Session, team: str, season: int, phase: str) -> dict:
     """One team's offensive playbook for a season."""
     league = _league_playbook(session, season, phase)
