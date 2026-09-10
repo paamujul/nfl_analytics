@@ -80,12 +80,18 @@ def _play_usage(session: Session, team: str, season: int, phase: str) -> dict:
             .group_by(Game.week)
         ).all())
 
+    # play_type == "pass" here is load-bearing, not decoration: it has to match
+    # the targets_by_player filter below or the ratio of the two exceeds 1.
+    # nflverse charts a route on penalty-nullified plays, which carry
+    # play_type "no_play" and are correctly absent from the target count. Five
+    # such rows league-wide in 2023 were enough to report Andrew Beck's route
+    # mix as 107.7% covered (14 routed plays over 13 targets).
     routes = session.execute(
         select(Play.receiver_id, Play.route, func.count())
         .join(Game, Game.id == Play.game_id)
         .where(Game.season == season, Game.phase == phase,
-               Play.posteam == team, Play.receiver_id.isnot(None),
-               Play.route.isnot(None))
+               Play.posteam == team, Play.play_type == "pass",
+               Play.receiver_id.isnot(None), Play.route.isnot(None))
         .group_by(Play.receiver_id, Play.route)
     ).all()
 
