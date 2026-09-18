@@ -124,7 +124,10 @@ export function MixBars({ title, mix, coverage, unit = 'plays', color = 'var(--s
   return (
     <div className={`mix-block ${level === 'low' ? 'low-cov' : ''}`}>
       {title && <div className="mix-title">{title}</div>}
-      {rows.length === 0 && <div className="cov-note">{empty}</div>}
+      {/* an API `reason` (participation not published yet, preseason, ...)
+          outranks the generic empty text for the same reason it does in
+          <ChartedMetric>: the plays exist, the charting does not */}
+      {rows.length === 0 && <div className="cov-note">{coverage?.reason ?? empty}</div>}
       {rows.map((r) => (
         <div className="mix-row" key={r.key}>
           <span className="lbl" title={r.key}>{r.key}</span>

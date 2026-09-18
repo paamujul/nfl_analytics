@@ -294,6 +294,66 @@ def test_playbook_ftn_is_absent_not_zero_before_2022(session):
     league_cache.clear()
 
 
+def _seed_espn_only(session, season: int, phase: str):
+    """A season the live ESPN ingester has reached but no nflverse feed has.
+
+    ESPN plays carry play_type and yardage and nothing else: no xpass, no
+    shotgun flag, no personnel, no FTN columns. This is what the 2026 regular
+    season looked like the day after week 1.
+    """
+    upsert_all(session, Team, [{"abbr": "KC", "name": "Kansas City Chiefs"},
+                               {"abbr": "BAL", "name": "Baltimore Ravens"}])
+    gid = f"{season}_01_BAL_KC"
+    upsert_all(session, Game, [{"id": gid, "season": season, "phase": phase, "week": 1,
+                                "home_team": "KC", "away_team": "BAL",
+                                "status": "final", "source": "espn"}])
+    upsert_all(session, Play, [
+        {"game_id": gid, "play_id": 100 + i, "posteam": "KC", "defteam": "BAL",
+         "play_type": "pass" if i < 2 else "run", "yards_gained": 4.0}
+        for i in range(4)
+    ])
+    session.commit()
+
+
+@pytest.mark.parametrize("phase, expect", [
+    ("reg", ("not synced", "published after the postseason", "no FTN charting rows")),
+    ("pre", ("preseason", "preseason", "preseason")),
+])
+def test_playbook_explains_empty_columns_when_plays_exist(session, phase, expect):
+    """Blank because the charting is missing, not because the plays are.
+
+    The UI's fallback caption is "no plays recorded"; for a team with 69 ESPN
+    plays and zero nflverse columns that is simply false, and the three feeds
+    go missing for three different reasons that the reader should be told.
+    """
+    league_cache.clear()
+    _seed_espn_only(session, 2026, phase)
+    pb = team_playbook(session, "KC", 2026, phase)["playbook"]
+    pbp_why, part_why, ftn_why = expect
+    assert pb["plays"] == 4
+    for key in ("xpass", "pass_oe", "shotgun_rate", "no_huddle_rate"):
+        assert pb[key]["value"] is None and pbp_why in pb[key]["reason"], key
+    for key in ("personnel", "formation"):
+        assert pb[key]["mix"] == [] and part_why in pb[key]["reason"], key
+    for key in ("play_action", "motion", "screen", "rpo"):
+        assert pb["ftn"][key]["value"] is None and ftn_why in pb["ftn"][key]["reason"], key
+    league_cache.clear()
+
+
+def test_playbook_gives_no_reason_when_there_are_no_plays(session):
+    """A team with no plays at all gets the plain empty shape: there is nothing
+    to explain, and a spurious "not synced yet" would itself be misleading."""
+    league_cache.clear()
+    _seed_espn_only(session, 2026, "reg")
+    pb = team_playbook(session, "BAL", 2026, "reg")["playbook"]   # BAL never had the ball
+    assert pb["plays"] == 0
+    for key in ("xpass", "shotgun_rate", "personnel", "formation"):
+        assert "reason" not in pb[key], key
+    for key in ("play_action", "motion", "screen", "rpo"):
+        assert "reason" not in pb["ftn"][key], key
+    league_cache.clear()
+
+
 def test_playbook_ftn_carries_a_sample_from_2022(seeded):
     pa = team_playbook(seeded, "KC", SEASON, "reg")["playbook"]["ftn"]["play_action"]
     assert pa["value"] == 0.6           # the six pass plays of ten

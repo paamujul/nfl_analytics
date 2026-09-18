@@ -88,14 +88,14 @@ function PlaybookTab({ d }: { d: CoachPlaybook }) {
     return <div className="verdict warn">No offensive plays recorded for {d.team.abbr} in{' '}
       {d.season} {PHASE_LABEL[d.phase]?.toLowerCase()}. Pick another season or phase above.</div>;
   }
-  // 2021 has no FTN charting at all. The block is still present and so are the
-  // four members -- each just comes back with n: 0 and its own `reason` string.
-  // So "missing" is n === 0 across the board, not a null member; a null-member
-  // test silently passes them through and they render as an empty sample
-  // instead of "no such data". <ChartedMetric> prefers the API's own reason.
+  // When FTN has nothing for a season, every member comes back with n: 0 and
+  // its own `reason` -- "begins in 2022" for 2021, "not published yet" for the
+  // season in progress, "no preseason coverage" for pre. <ChartedMetric> shows
+  // that reason itself; the footnote below just says once that blank != zero,
+  // and repeats whichever reason the API gave rather than guessing at one.
   const ftn = pb.ftn;
+  const ftnReason = ftn && Object.values(ftn).find((v) => v?.reason)?.reason;
   const ftnMissing = !ftn || Object.values(ftn).every((v) => v == null || v.n === 0);
-  const ftnNote = 'not charted before 2022 (FTN charting begins in the 2022 season)';
 
   return (
     <>
@@ -140,19 +140,14 @@ function PlaybookTab({ d }: { d: CoachPlaybook }) {
       <h2 className="section">FTN charting
         <small>play-action, motion, screen and RPO come from FTN’s manual charting</small></h2>
       <div className="card charted-grid">
-        <ChartedMetric label="Play action" c={ftn?.play_action}
-          notCharted={ftnMissing ? ftnNote : undefined} />
-        <ChartedMetric label="Pre-snap motion" c={ftn?.motion}
-          notCharted={ftnMissing ? ftnNote : undefined} />
-        <ChartedMetric label="Screen" c={ftn?.screen}
-          notCharted={ftnMissing ? ftnNote : undefined} />
-        <ChartedMetric label="RPO" c={ftn?.rpo}
-          notCharted={ftnMissing ? ftnNote : undefined} />
+        <ChartedMetric label="Play action" c={ftn?.play_action} />
+        <ChartedMetric label="Pre-snap motion" c={ftn?.motion} />
+        <ChartedMetric label="Screen" c={ftn?.screen} />
+        <ChartedMetric label="RPO" c={ftn?.rpo} />
       </div>
-      {ftnMissing && (
+      {ftnMissing && ftnReason && (
         <div className="note" style={{ marginTop: -6 }}>
-          These four are blank rather than zero: FTN charting starts in 2022, so
-          {' '}{d.season} has no play-action, motion, screen or RPO record at all.
+          These four are blank rather than zero — {ftnReason}.
         </div>
       )}
 
@@ -193,9 +188,7 @@ function ScriptColumn({ split, title, sub }: { split: ScriptSplit; title: string
           </div>
           <div className="charted-grid" style={{ marginTop: 10 }}>
             <ChartedMetric label="Shotgun" c={split.shotgun_rate} />
-            <ChartedMetric label="Play action" c={split.play_action_rate}
-              notCharted={split.play_action_rate?.value == null && split.plays
-                ? 'not charted before 2022' : undefined} />
+            <ChartedMetric label="Play action" c={split.play_action_rate} />
           </div>
           <MixBars title="Personnel" mix={split.personnel_mix} max={4} />
         </>
@@ -210,8 +203,14 @@ function DrivesTab({ d, scriptLength, setScriptLength }: {
   const dr = d.drives;
   const la = d.league_average;
   if (!dr.drives) {
-    return <div className="verdict warn">No drives recorded for {d.team.abbr} in {d.season}{' '}
-      {PHASE_LABEL[d.phase]?.toLowerCase()}.</div>;
+    // Drive boundaries come from nflverse play-by-play, never from ESPN's
+    // plays, so this is the same "plays exist, the feed doesn't" state the
+    // playbook tab captions per tile -- say so rather than imply an idle team.
+    return <div className="verdict warn">No drive data for {d.team.abbr} in {d.season}{' '}
+      {PHASE_LABEL[d.phase]?.toLowerCase()} — drives are built from nflverse play-by-play,
+      which {d.phase === 'pre'
+        ? 'does not cover the preseason'
+        : 'arrives with the nightly refresh, a day or two behind the games'}.</div>;
   }
   const zoneChart = dr.by_start_zone.map((z) => ({
     name: ZONE_LABEL[z.zone] ?? z.zone,

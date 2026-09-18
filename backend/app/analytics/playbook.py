@@ -44,6 +44,28 @@ FTN_MISSING_REASON = (
     "no data exists for this season"
 )
 
+# Why a column can be empty for a team that clearly has plays. Each is a
+# different upstream fact and the UI prints the string verbatim, because its
+# fallback -- "no plays recorded" -- is false for every one of them: the plays
+# are there, it is the charting that is not. Seen live on the 2026 regular
+# season, where ESPN had ingested week 1 before any nflverse feed caught up.
+PRESEASON_REASON = (
+    "nflverse does not publish play-by-play, participation or FTN charting "
+    "for the preseason; only ESPN's box-score plays exist here"
+)
+PBP_PENDING_REASON = (
+    "not synced from nflverse play-by-play yet -- these columns arrive with "
+    "the nightly refresh, a day or two behind the games"
+)
+PARTICIPATION_PENDING_REASON = (
+    "personnel and formation come from nflverse participation data, which is "
+    "published after the postseason, not during the season"
+)
+FTN_PENDING_REASON = (
+    "no FTN charting rows for this season yet -- FTN publishes weekly during "
+    "the season, a few days behind the games"
+)
+
 
 def _distance_bin(ydstogo: int | None) -> str | None:
     if ydstogo is None:
@@ -222,16 +244,23 @@ def _compute_league_playbook(session: Session, season: int, phase: str) -> dict[
         _accumulate_pass_oe(acc, p)
         if p.play_type in ("pass", "run"):
             _accumulate(acc, p)
-    return {team: _finalize(acc, season) for team, acc in by_team.items()}
+    return {team: _finalize(acc, season, phase) for team, acc in by_team.items()}
 
 
-def _finalize(acc: dict, season: int) -> dict:
+def _finalize(acc: dict, season: int, phase: str = "reg") -> dict:
     """Accumulator -> plain scalars. Nothing below may hold a Row or a Session."""
     n = acc["plays"]
     scrim = acc["pass"] + acc["run"]
 
     def mean(total: float, count: int, digits: int = 3):
         return round(total / count, digits) if count else None
+
+    # A metric with no charted rows on a team that has plays gets told why.
+    # Only then: with no plays at all, "no plays recorded" is the truth.
+    def why(d: dict, reason: str) -> dict:
+        if n and not d["n"]:
+            d["reason"] = PRESEASON_REASON if phase == "pre" else reason
+        return d
 
     ftn: dict = {}
     if season < FTN_FIRST_SEASON:
@@ -240,7 +269,7 @@ def _finalize(acc: dict, season: int) -> dict:
                         "reason": FTN_MISSING_REASON}
     else:
         for key, (hits, count) in acc["ftn"].items():
-            ftn[key] = charted(hits, count, n)
+            ftn[key] = why(charted(hits, count, n), FTN_PENDING_REASON)
 
     return {
         "plays": n,
@@ -251,15 +280,19 @@ def _finalize(acc: dict, season: int) -> dict:
         # xpass / pass_oe are nflverse model outputs and are charted on nearly
         # every scrimmage play, but they still get the sparse shape: the model
         # declines to score some situations and the caller should see that.
-        "xpass": {"value": mean(acc["xpass_sum"], acc["xpass_n"]),
-                  "n": acc["xpass_n"],
-                  "coverage": mean(acc["xpass_n"], acc["pass_oe_rows"] or n)},
-        "pass_oe": {"value": mean(acc["pass_oe_sum"], acc["pass_oe_n"], 2),
-                    "n": acc["pass_oe_n"],
-                    "coverage": 1.0 if acc["pass_oe_n"] else None},
-        "shotgun_rate": charted(acc["shotgun_hits"], acc["shotgun_n"], n),
-        "no_huddle_rate": charted(acc["no_huddle_hits"], acc["no_huddle_n"], n),
-        "personnel": {
+        "xpass": why({"value": mean(acc["xpass_sum"], acc["xpass_n"]),
+                      "n": acc["xpass_n"],
+                      "coverage": mean(acc["xpass_n"], acc["pass_oe_rows"] or n)},
+                     PBP_PENDING_REASON),
+        "pass_oe": why({"value": mean(acc["pass_oe_sum"], acc["pass_oe_n"], 2),
+                        "n": acc["pass_oe_n"],
+                        "coverage": 1.0 if acc["pass_oe_n"] else None},
+                       PBP_PENDING_REASON),
+        "shotgun_rate": why(charted(acc["shotgun_hits"], acc["shotgun_n"], n),
+                            PBP_PENDING_REASON),
+        "no_huddle_rate": why(charted(acc["no_huddle_hits"], acc["no_huddle_n"], n),
+                              PBP_PENDING_REASON),
+        "personnel": why({
             "mix": rate_table(acc["groupings"]),
             "n": acc["personnel_charted"],
             "coverage": mean(acc["personnel_charted"], n),
@@ -271,12 +304,12 @@ def _finalize(acc: dict, season: int) -> dict:
                               for k in ("backed_up", "own_territory",
                                         "opp_territory", "red_zone")
                               if k in acc["grouping_by_field_zone"]},
-        },
-        "formation": {
+        }, PARTICIPATION_PENDING_REASON),
+        "formation": why({
             "mix": rate_table(acc["formations"]),
             "n": acc["formation_charted"],
             "coverage": mean(acc["formation_charted"], n),
-        },
+        }, PARTICIPATION_PENDING_REASON),
         "ftn": ftn,
     }
 
@@ -374,7 +407,7 @@ def team_playbook(session: Session, team: str, season: int, phase: str) -> dict:
                  "color": t.color if t else None, "logo": t.logo if t else None},
         "season": season, "phase": phase,
         "play_caller": _caller_for(row, names) if row else None,
-        "playbook": mine or _finalize(_blank(), season),
+        "playbook": mine or _finalize(_blank(), season, phase),
         "league_ranks": _ranks(league, team),
     }
 
@@ -432,7 +465,7 @@ def play_caller_playbook(session: Session, coach_id: str, season: int, phase: st
         "season": season, "phase": phase,
         "teams": [_caller_for(r, names) | {"team": r.team} for r in mine],
         "verified": all(bool(r.verified) for r in mine),
-        "playbook": _finalize(acc, season),
+        "playbook": _finalize(acc, season, phase),
     }
 
 

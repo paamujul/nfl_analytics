@@ -122,6 +122,9 @@ export interface Mix {
   mix: MixEntry[];
   n: number;
   coverage: number | null;
+  // Same contract as Charted.reason: set when the mix is empty because the
+  // charting does not exist (yet) for this season, not because no plays do.
+  reason?: string | null;
 }
 export interface PersonnelMix extends Mix {
   by_down: Record<string, MixEntry[]>;

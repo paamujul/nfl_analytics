@@ -32,6 +32,9 @@ from sqlalchemy import Integer, Row, case, func, select
 from sqlalchemy.orm import Session
 
 from app.analytics.personnel import offense_grouping, rate_table
+from app.analytics.playbook import (
+    FTN_FIRST_SEASON, FTN_MISSING_REASON, FTN_PENDING_REASON, PRESEASON_REASON,
+)
 from app.cache import league_cache
 from app.db.models import Game, Play, Team
 
@@ -240,9 +243,18 @@ def _add_call(b: dict, p: Row) -> None:
         b["groupings"][grouping] += 1
 
 
-def _finalize_calls(b: dict) -> dict:
+def _finalize_calls(b: dict, season: int, phase: str) -> dict:
     def r(x, d, digits=3):
         return round(x / d, digits) if d else None
+    pa = {"value": r(b["pa_hits"], b["pa_n"]),
+          "n": b["pa_n"], "coverage": r(b["pa_n"], b["n"])}
+    # Same contract as playbook._finalize: plays without a single charted
+    # play-action row get the upstream reason, so the UI never shows a blank
+    # that could be read as 0% (or as "no plays").
+    if b["n"] and not b["pa_n"]:
+        pa["reason"] = (PRESEASON_REASON if phase == "pre"
+                        else FTN_MISSING_REASON if season < FTN_FIRST_SEASON
+                        else FTN_PENDING_REASON)
     return {
         "plays": b["n"],
         "pass_rate": r(b["pass"], b["n"]),
@@ -250,8 +262,7 @@ def _finalize_calls(b: dict) -> dict:
         # caller should not have to know which columns happen to be dense.
         "shotgun_rate": {"value": r(b["shotgun_hits"], b["shotgun_n"]),
                          "n": b["shotgun_n"], "coverage": r(b["shotgun_n"], b["n"])},
-        "play_action_rate": {"value": r(b["pa_hits"], b["pa_n"]),
-                             "n": b["pa_n"], "coverage": r(b["pa_n"], b["n"])},
+        "play_action_rate": pa,
         "epa_per_play": r(b["epa"], b["epa_n"]),
         "success_rate": r(b["success"], b["success_n"]),
         "personnel_mix": rate_table(b["groupings"])[:5],
@@ -310,14 +321,14 @@ def _script_and_sequence(session: Session, team: str, season: int, phase: str,
 
     return {
         "script_length": script_length,
-        "scripted": _finalize_calls(scripted),
-        "rest_of_game": _finalize_calls(rest),
+        "scripted": _finalize_calls(scripted, season, phase),
+        "rest_of_game": _finalize_calls(rest, season, phase),
         # Sorted by sample size: the thin cells (safeties, opp touchdowns) are
         # the ones a reader is most likely to over-read, so they sort last.
         "after_previous_drive": [
             {"previous_result": k,
-             "opening_play": _finalize_calls(openers[k]),
-             "whole_drive": _finalize_calls(whole[k])}
+             "opening_play": _finalize_calls(openers[k], season, phase),
+             "whole_drive": _finalize_calls(whole[k], season, phase)}
             for k in sorted(whole, key=lambda k: -whole[k]["n"])
         ],
     }
