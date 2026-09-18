@@ -5,8 +5,13 @@ container holds FastAPI, the built SPA, and the live ESPN ingester. Postgres
 stays at Supabase. Nothing is exposed to the internet directly: a Cloudflare
 Tunnel dials out from the box, so the VM has no inbound HTTP ports at all.
 
-> **Status of this document.** It was written against the code, not against a
-> running VM. Commands marked *unverified* have not been executed anywhere.
+> **Status of this document.** Provisioned for real on 2026-09-18: VM
+> `nfl-analytics` (e2-micro from day one, dedicated VPC `nfl-vpc`) in project
+> `project-e7b849a1-fc6a-41d7-879`, us-east1-b. Checklist items 1–5, 7 and 11
+> below are verified on that box; the rest still need a domain or a live game.
+> Three things the first run turned up are folded into the code and noted in
+> place: `setup.sh` must pin `ip_forward=1` (§5), the image needs `libgomp1`
+> for LightGBM and must carry `deploy/data` (both in `backend/Dockerfile`).
 
 ## Why this shape
 
@@ -203,13 +208,34 @@ change to the units. It installs Docker CE, creates the swapfile, creates the
 data directory, writes the config files, installs `nfl-deploy` and both systemd
 units, and configures Artifact Registry credentials for root.
 
-Then fill in the database URL and start the app:
+Then fill in the database URL and start the app. The VM's service account has
+`roles/secretmanager.secretAccessor` on `nfl-database-url`, so the value can
+be piped straight from Secret Manager into the env file without ever being
+displayed or pasted — this is how it was done on the real box:
 
 ```bash
-sudo nano /etc/nfl-analytics.env      # set DATABASE_URL
+URL=$(gcloud secrets versions access latest --secret=nfl-database-url)
+sudo sed -i "s#^DATABASE_URL=.*#DATABASE_URL=${URL}#" /etc/nfl-analytics.env
+unset URL
+# The secret was created for Cloud Run and names the transaction pooler; the
+# VM wants the session pooler (§1). Same host, different port:
+sudo sed -i -E 's#(\.pooler\.supabase\.com):6543#\1:5432#' /etc/nfl-analytics.env
+
 sudo systemctl start nfl-analytics
 curl -s localhost:8600/api/status | head -c 400
 ```
+
+Run migrations the same way, with the env file the app itself uses:
+
+```bash
+sudo docker run --rm --env-file /etc/nfl-analytics.env "$IMAGE" alembic upgrade head
+```
+
+> **Container egress.** If containers cannot resolve DNS or reach anything
+> while the host can, check `cat /proc/sys/net/ipv4/ip_forward`. GCE's Debian
+> image ships `60-gce-network-security.conf` with it set to 0, and any
+> `sysctl --system` after Docker starts re-applies that. `setup.sh` now pins
+> `net.ipv4.ip_forward=1` in its own drop-in; this bit the very first run.
 
 ### What the script sets up, and why each piece matters
 
@@ -538,7 +564,27 @@ OOM outright on an e2-micro. It is a debugging escape hatch, not the schedule.
 
 ## Verification checklist
 
-Nothing below has been run. It is the list to work through on the real box.
+Run on the real box on 2026-09-18. ✅ = verified there; ⏳ = still needs a
+domain (6, 9, 10) or a live game window (8).
+
+- ✅ 1, 2, 3, 4, 5 — plus `/api/coach/predict` returns a prediction after
+  `deploy/data` and `libgomp1` were added to the image and the 2025 backfill
+  (`gcloud run jobs execute nfl-analytics-nflverse-refresh
+  --args=-m,app.cli,backfill-nflverse,2025`) populated `coaching_staff`.
+- ✅ 7 — a deploy of a nonexistent tag failed at `docker pull`, left the
+  image pointer on the previous tag, and the site stayed up.
+- ✅ 11 — after `sudo reboot`, `nfl-analytics` and Docker came back on their
+  own with `ip_forward=1` and swap active; `/api/status` was 200 within ~90 s
+  (an e2-micro boots slowly — allow more than 60 s before declaring it dead).
+- ⏳ 6, 8, 9, 10.
+
+Model artifacts (`STORAGE_DIR/models/`) were copied from a workstation with
+`tar` + `gcloud compute scp` and `chown -R 10001:10001`; strip macOS `._*`
+resource-fork files afterwards (`find ... -name '._*' -delete`). Until the
+`model_artifacts` table exists (`app/ml/artifacts.py`), a rebuilt VM needs
+this step repeated.
+
+The original list:
 
 1. `sudo bash deploy/gcp/setup.sh <image>` completes, and re-running it changes
    nothing.
