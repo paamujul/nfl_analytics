@@ -33,6 +33,14 @@ COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini .
 
+# Checked-in seed data (deploy/data/coaches.yml). app.config defaults DATA_DIR
+# to <repo>/deploy/data, which does not exist inside the image -- without this
+# COPY and the ENV below, sync_coaching_staff logs "missing seed file" on every
+# refresh and /api/coach/* 404s with "no coaching staff on record". Note the
+# root .dockerignore excludes deploy/ but re-includes deploy/data for this.
+COPY deploy/data ./data
+ENV DATA_DIR=/app/data
+
 # The built SPA: /app/static/index.html plus hashed assets in /app/static/assets.
 # app.main mounts this at / and serves index.html for unknown paths so client
 # -side routes survive a hard refresh. Copied before the chown below so the

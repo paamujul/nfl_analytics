@@ -32,4 +32,7 @@ backend/tests
 backend/requirements-dev.txt
 backend/pytest.ini
 deploy
+# ...except the checked-in seed data, which backend/Dockerfile copies to
+# /app/data (DATA_DIR). Nothing else under deploy/ belongs in the image.
+!deploy/data
 *.md
