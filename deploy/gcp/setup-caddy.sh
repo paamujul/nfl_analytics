@@ -51,9 +51,13 @@ fi
 # ------------------------------------------------------------- 2. Caddyfile
 echo "==> Writing /etc/caddy/Caddyfile for $HOST (ip $IP)"
 mkdir -p /var/log/caddy
-chown caddy:caddy /var/log/caddy
 sed -e "s/__HOST__/$HOST/g" -e "s/__IP__/$IP/g" "$SCRIPT_DIR/Caddyfile" > /etc/caddy/Caddyfile
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+# AFTER validate, not before: validating provisions the log module, which
+# creates nfl-analytics.log -- as root, since that is who runs this script.
+# The service then runs as `caddy` and fails to open its own log file.
+# Bitten by this on the first run.
+chown -R caddy:caddy /var/log/caddy
 
 # --------------------------------------------------------------- 3. Enable
 systemctl enable --now caddy >/dev/null
