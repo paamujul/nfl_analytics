@@ -10,6 +10,7 @@ import PlayerPage from './pages/PlayerPage'
 import ComparePage from './pages/ComparePage'
 import DefenseLabPage from './pages/DefenseLabPage'
 import CoachPage from './pages/CoachPage'
+import CoachIndexPage from './pages/CoachIndexPage'
 
 const router = createBrowserRouter([
   {
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
       { path: 'player/:id', element: <PlayerPage /> },
       { path: 'compare', element: <ComparePage /> },
       { path: 'defense', element: <DefenseLabPage /> },
+      { path: 'coach', element: <CoachIndexPage /> },
       { path: 'coach/:abbr', element: <CoachPage /> },
     ],
   },
