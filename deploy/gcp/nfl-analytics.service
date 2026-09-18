@@ -33,11 +33,11 @@ ExecStartPre=-/usr/bin/docker rm -f nfl-analytics
 #   never created an ingress rule for it. Cloudflared connects over loopback,
 #   so there is no reason to bind anything wider.
 #
-# --memory 1200m -- headroom on the 2 GB e2-small. Drop this to 700m when the
-#   VM is downsized to a 1 GB e2-micro after the GCP trial credits expire
-#   (see DEPLOY_VM.md); the swapfile is what makes 700m survivable.
+# --memory 700m -- the VM is a 1 GB e2-micro (always-free tier); the
+#   swapfile is what makes 700m survivable. On a 2 GB e2-small this can be
+#   raised to 1200m (see DEPLOY_VM.md §9).
 #
-# --memory-swap 2g -- total memory+swap, i.e. 800m of swap available to the
+# --memory-swap 2g -- total memory+swap, i.e. 1300m of swap available to the
 #   container. Without this flag Docker allows swap equal to --memory, which
 #   is not what the host swapfile was sized for.
 #
@@ -46,7 +46,7 @@ ExecStart=/usr/bin/docker run --rm --name nfl-analytics \
     --env-file /etc/nfl-analytics.env \
     -p 127.0.0.1:8600:8600 \
     -v /var/lib/nfl-analytics:/app/storage \
-    --memory 1200m --memory-swap 2g \
+    --memory 700m --memory-swap 2g \
     --stop-timeout 45 \
     --log-driver journald \
     ${IMAGE}
