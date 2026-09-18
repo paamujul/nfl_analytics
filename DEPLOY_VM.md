@@ -152,6 +152,57 @@ gcloud compute firewall-rules create nfl-allow-iap-ssh \
 > box. There is no Caddy here and no TLS on the box; that block must not be
 > carried over. Cloudflare terminates TLS at the edge.
 
+### 3b. The alternative actually running: Caddy, no Cloudflare
+
+Everything above is the tunnel design. **The box was launched on 2026-09-18
+without it**, because a tunnel needs a domain in a Cloudflare account and
+there was none. Instead Caddy terminates TLS on the VM for an
+[sslip.io](https://sslip.io) hostname — `<ip>.sslip.io` resolves to that IP,
+and Let's Encrypt issues for it — and reverse-proxies to the container on
+loopback. Public URL: **https://34.26.115.25.sslip.io**.
+
+What that changes relative to the rest of this document:
+
+| | Tunnel (§6–§7) | Caddy (this section) |
+|---|---|---|
+| Domain needed | yes | no |
+| Inbound firewall | none | `tcp:80,443` from `0.0.0.0/0` to tag `nfl-analytics` (`nfl-allow-web`) |
+| TLS | Cloudflare edge | Let's Encrypt on the box, Caddy renews |
+| Edge cache | Cache Rule | none — every request reaches the VM |
+| External IP | ephemeral was fine | **reserved static** (`nfl-analytics-ip`); the hostname *is* the IP |
+| Checklist #4 | 80/443 must fail from outside | 80/443 must answer; **8600 still must not** |
+
+Setup, after §5:
+
+```bash
+gcloud compute addresses create nfl-analytics-ip --region us-east1 --addresses <current-ip>
+gcloud compute firewall-rules create nfl-allow-web --network nfl-vpc \
+  --direction INGRESS --action allow --rules tcp:80,tcp:443 \
+  --source-ranges 0.0.0.0/0 --target-tags nfl-analytics
+# on the box
+sudo bash deploy/gcp/setup-caddy.sh <ip>.sslip.io
+```
+
+[`deploy/gcp/setup-caddy.sh`](deploy/gcp/setup-caddy.sh) installs Caddy from
+its official repo and templates [`deploy/gcp/Caddyfile`](deploy/gcp/Caddyfile)
+with the hostname and the VM's metadata-reported IP. The Caddyfile is a bare
+`reverse_proxy 127.0.0.1:8600` plus an `http://<ip>` → `https://` redirect;
+the container already serves SPA and API together and sets its own
+`Cache-Control`, so Caddy does no routing. Certificate issuance took ~10 s on
+first request; renewal is Caddy's job.
+
+Trade-offs, stated once: the hostname depends on sslip.io staying up (a tiny
+free DNS service — the IP would survive, the name would not); bots will scan
+80/443 within minutes of opening them, and with no edge cache a scraper lands
+directly on the e2-micro. Both accepted for a demo. Moving to the tunnel later
+is additive: run §6, then delete `nfl-allow-web` and `systemctl disable --now
+caddy`.
+
+Verified on the box: `sudo ss -lntp` shows Caddy on `*:80`/`*:443` and
+docker-proxy on `127.0.0.1:8600` only; `nc -vz <ip> 8600` from outside times
+out; `sudo reboot` brings Caddy and the app back with HTTPS answering within
+~2 minutes.
+
 ---
 
 ## 4. Service accounts and IAM
@@ -486,7 +537,9 @@ for the first week.
 
 ## 10. Monitoring
 
-Point UptimeRobot at the public hostname:
+Point UptimeRobot at the public hostname. Set the monitor's HTTP method to
+**GET**: FastAPI's `@router.get` routes and the SPA fallback answer HEAD with
+405, so a HEAD-based check reports a healthy site as down.
 
 - `GET /` — liveness, touches no database.
 - `GET /api/health` — returns **503** once the last successful sync is more
@@ -576,7 +629,11 @@ domain (6, 9, 10) or a live game window (8).
 - ✅ 11 — after `sudo reboot`, `nfl-analytics` and Docker came back on their
   own with `ip_forward=1` and swap active; `/api/status` was 200 within ~90 s
   (an e2-micro boots slowly — allow more than 60 s before declaring it dead).
-- ⏳ 6, 8, 9, 10.
+- ✅ 4, re-read for the Caddy path (§3b): `*:80`/`*:443` are Caddy, 8600 is
+  loopback-only and unreachable from outside. ✅ 6 in its §3b form: the public
+  hostname serves the SPA and `/api` same-origin over Let's Encrypt TLS, no
+  CORS, no `VITE_API_BASE`. ✅ 11 again with Caddy enabled.
+- ⏳ 8 (needs a live game), 9 and 10 (need the tunnel / a monitor).
 
 Model artifacts (`STORAGE_DIR/models/`) were copied from a workstation with
 `tar` + `gcloud compute scp` and `chown -R 10001:10001`; strip macOS `._*`
