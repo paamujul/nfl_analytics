@@ -1,0 +1,35 @@
+# Caddy in front of the NFL Analytics container, for the direct-hosting path
+# (no Cloudflare Tunnel). Installed to /etc/caddy/Caddyfile by setup-caddy.sh,
+# which substitutes __HOST__.
+#
+# The container already serves the SPA and /api on one port and sets its own
+# Cache-Control headers, so there is no path routing and no static file server
+# here -- Caddy's job is TLS termination and nothing else.
+#
+# Certificates are automatic. With no domain, an sslip.io name works:
+# <ip-with-dots-or-dashes>.sslip.io resolves to that IP, and Let's Encrypt
+# will issue for it (Caddy falls back to ZeroSSL if LE rate-limits). Caddy
+# renews on its own; there is nothing to schedule.
+
+__HOST__ {
+	encode zstd gzip
+
+	# uvicorn runs with --proxy-headers --forwarded-allow-ips=*, so the
+	# X-Forwarded-* headers Caddy adds are trusted. Only Caddy can reach 8600:
+	# the container publishes on 127.0.0.1 alone.
+	reverse_proxy 127.0.0.1:8600
+
+	log {
+		output file /var/log/caddy/nfl-analytics.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
+
+# Plain http:// on the bare IP. Caddy redirects to https on the hostname above
+# rather than serving here, so a bookmark to the raw IP still lands somewhere
+# that works instead of a certificate error.
+http://__IP__ {
+	redir https://__HOST__{uri} permanent
+}
