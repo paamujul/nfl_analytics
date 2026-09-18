@@ -26,6 +26,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# libgomp1: LightGBM's wheel links against OpenMP, which the slim image does not
+# ship. Without it `import lightgbm` raises OSError (libgomp.so.1) and
+# /api/coach/predict reports "no trained play-call model" even when the
+# artifact is right there. Found on the first VM deploy.
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
