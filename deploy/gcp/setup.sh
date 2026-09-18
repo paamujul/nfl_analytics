@@ -76,9 +76,17 @@ else
 fi
 grep -qs '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
-echo "==> Setting vm.swappiness=10"
+# net.ipv4.ip_forward=1 is here because of the `sysctl --system` below, not
+# for its own sake. Docker enables forwarding when the daemon starts, but GCE's
+# Debian image ships /etc/sysctl.d/60-gce-network-security.conf with
+# ip_forward=0, and reloading every drop-in re-applies that AFTER Docker has
+# started -- verified on the first run of this script: containers lost all
+# egress (DNS and TCP alike) until the sysctl was set again. The 99- prefix
+# sorts after 60-, so this drop-in wins.
+echo "==> Setting vm.swappiness=10 and net.ipv4.ip_forward=1"
 cat > /etc/sysctl.d/99-nfl-analytics.conf <<'EOF'
 vm.swappiness=10
+net.ipv4.ip_forward=1
 EOF
 sysctl --quiet --system
 
